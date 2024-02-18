@@ -1,0 +1,412 @@
+---
+title: "Greendale Archbot for sites 520, 521, and 523"
+author: "Daniel R Williams"
+date: "1/4/2018"
+output: 
+  pdf_document:
+    fig_caption: yes
+    latex_engine: xelatex
+  html_document:
+    df_print: paged
+  word_document: default
+  html_notebook: default
+mathfont: Latin Modern Roman
+monofont: Fira Code
+mainfont: Adobe Garamond Pro
+sansfont: SF UI Text
+header-includes:
+- \setlength{\columnsep}{18pt}
+- \usepackage[font=small,labelfont=bf]{caption}
+- \usepackage[fontsize=9pt]{scrextend}
+- \raggedright
+---
+
+# Intoduction to R Markdown
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
+<!-- This code help set things up -->
+```{r setup, include=FALSE, cache = FALSE}
+library(knitr)
+knitr::opts_chunk$set(echo = FALSE, cache = TRUE, message = FALSE, warning = FALSE, results = "hide", fig.show = 'asis', tidy = TRUE, progress = TRUE, fig.asp = 1, out.width = "90%", fig.align = "center", fig.path = 'figures/')
+
+library(tidyverse)
+library(magrittr)
+library(ggplot2)
+
+# libraries for this assignment
+library(ade4)
+library(vegan)
+library(gclus)
+library(ape)
+library(MASS)
+
+source("/Users/aperium/Dropbox/Projects/MSES/CLasses/Bios 8700 - Biostats II/WorkingDirectory/multiplot.R")
+
+library(extrafont)
+# ttf_import("/Users/aperium/Downloads")
+loadfonts(device = "pdf")
+# font_import(paths = "/Users/aperium/Downloads", prompt = FALSE) # import all your fonts
+
+theme_danraywill <- function( ... ) {
+  theme_minimal() +
+    theme(
+      text = element_text(hjust=0.5, vjust=0, size = 12, family = ""),
+      strip.text = element_text(size = 12, face = "bold"),
+      axis.title = element_text(hjust=0.5, vjust=0.5, face = "bold"),
+      panel.background = element_rect(color = "grey50", fill = "white"),
+      panel.spacing = unit(0.25, "inches"),
+      panel.grid = element_blank(),
+      complete = TRUE
+    ) +
+    theme(...)
+}
+```
+
+# Archbot Analysis
+
+```{r archbot1, results = "asis", cache = TRUE, fig.cap=" \\label{archbot1}"}
+
+# reading data from file and tidying it up
+archseeds <- read_csv("/Users/aperium/Dropbox/Projects/Chenopodium/Data/Greendale_520_521_523_chenopod_diameters.csv") %>%
+  transmute(feature = as.factor(Feature), specimen = Specimen, length = length, width = Width, testa = Testa)
+
+# ANOVA and Tukey for length
+anova_l <- anova(lm(length ~ feature, data=archseeds))
+tukey_l <- TukeyHSD(aov(length ~ feature, data=archseeds))
+# anova_l
+# tukey_l
+
+# ANOVA and Tukey for width
+anova_w <- anova(lm(width ~ feature, data=archseeds))
+tukey_w <- TukeyHSD(aov(width ~ feature, data=archseeds))
+# anova_w
+# tukey_w
+
+# ANOVA and Tukey for width
+anova_t <- anova(lm(testa ~ feature, data=archseeds))
+tukey_t <- TukeyHSD(aov(testa ~ feature, data=archseeds))
+# anova_t
+# tukey_t
+
+knitr::kable(
+  anova_l,
+  digits = 3,
+  caption = "ANOVA on widths"
+)
+
+knitr::kable(
+  tukey_l$feature,
+  digits = 3,
+  caption = "Tukey on widths"
+)
+
+knitr::kable(
+  anova_w,
+  digits = 3,
+  caption = "ANOVA on lengths"
+)
+
+knitr::kable(
+  tukey_w$feature,
+  digits = 3,
+  caption = "Tukey on lengths"
+)
+
+
+knitr::kable(
+  anova_t,
+  digits = 3,
+  caption = "ANOVA on testas"
+)
+
+knitr::kable(
+  tukey_t$feature,
+  digits = 3,
+  caption = "Tukey on testas"
+)
+```
+```{r archbot2, eval = FALSE, fig.cap=" \\label{archbot2}"}
+
+#
+a <- ggplot(archseeds) +
+  geom_histogram(aes(x = width, fill = feature), position = "dodge") +
+  facet_wrap(~feature) +
+  theme_danraywill()
+
+b <- ggplot(archseeds) +
+  geom_histogram(aes(x = length, fill = feature), position = "dodge") +
+  facet_wrap(~feature) +
+  theme_danraywill()
+
+multiplot(a,b,cols = 1)
+```
+
+```{r archbot3, fig.show="hide", cache = TRUE, fig.cap=" \\label{archbot3}"}
+# Add a Normal Curve (Thanks to Peter Dalgaard) https://www.statmethods.net/graphs/density.html
+
+par(mfrow = c(3,5))
+
+# lengths
+
+xlim = range(archseeds$length)
+ylim = c(0,8)
+# breaks = seq(xlim[1]-0.1,xlim[2]+0.1,by = 0.1)
+# interval <- (xlim[2]+0.1 - xlim[1]-0.1)/10
+# breaks = seq(xlim[1]-0.1,xlim[2]+0.1,by = interval)
+interval <- (xlim[2] - xlim[1])/10
+breaks = seq(xlim[1],xlim[2],by = interval)
+
+x520 <- filter(archseeds, feature == "520")$length
+h520<-hist(x520, breaks=breaks, col="grey50", border = "grey70", main="Histogram with Normal Curve", ylim = ylim, xlim = xlim) 
+xfit520<-seq(min(x520),max(x520),length=40) 
+yfit520<-dnorm(xfit520,mean=mean(x520),sd=sd(x520)) * diff(h520$mids[1:2])*length(x520) 
+lines(xfit520, yfit520, col="red", lwd=2)
+
+norm_seeds <- tibble(feature = "520", var = "length", xfit = xfit520, yfit = yfit520)
+
+x521 <- filter(archseeds, feature == "521")$length
+h521 <- hist(x521, breaks=breaks, col="grey50", border = "grey70", main="Histogram with Normal Curve", ylim = ylim, xlim = xlim) 
+xfit521 <- seq(min(x521),max(x521),length=40) 
+yfit521 <- dnorm(xfit521,mean=mean(x521),sd=sd(x521)) * diff(h521$mids[1:2])*length(x521) 
+lines(xfit521, yfit521, col="blue", lwd=2)
+
+norm_seeds %<>% add_row(feature = "521", var = "length", xfit = xfit521, yfit = yfit521)
+
+x523 <- filter(archseeds, feature == "523")$length
+h523 <- hist(x523, breaks=breaks, col="grey50", border = "grey70", main="Histogram with Normal Curve", ylim = ylim, xlim = xlim) 
+xfit523 <- seq(min(x523),max(x523),length=40) 
+yfit523 <- dnorm(xfit523,mean=mean(x523),sd=sd(x523)) * diff(h523$mids[1:2])*length(x523) 
+lines(xfit523, yfit523, col="green", lwd=2)
+
+norm_seeds %<>% add_row(feature = "523", var = "length", xfit = xfit523, yfit = yfit523)
+
+plot(x520, type = "n", main="Histogram with Normal Curve", ylim = ylim, xlim = xlim)
+lines(xfit520, yfit520, col="red", lwd=2)
+lines(xfit521, yfit521, col="blue", lwd=2)
+lines(xfit523, yfit523, col="green", lwd=2)
+
+boxplot(length ~ feature, data = archseeds)
+
+# Widths
+
+xlim = range(archseeds$width)
+# ylim = c(0,8)
+# breaks = seq(xlim[1]-0.1,xlim[2]+0.1,by = 0.1)
+interval <- (xlim[2] - xlim[1])/10
+breaks = seq(xlim[1],xlim[2],by = interval)
+
+x520 <- filter(archseeds, feature == "520")$width
+h520<-hist(x520, breaks=breaks, col="grey50", border = "grey70", main="Histogram with Normal Curve", ylim = ylim, xlim = xlim) 
+xfit520<-seq(min(x520),max(x520),length=40) 
+yfit520<-dnorm(xfit520,mean=mean(x520),sd=sd(x520)) * diff(h520$mids[1:2])*length(x520) 
+lines(xfit520, yfit520, col="red", lwd=2)
+
+norm_seeds %<>% add_row(feature = "520", var = "width", xfit = xfit520, yfit = yfit520)
+
+x521 <- filter(archseeds, feature == "521")$width
+h521 <- hist(x521, breaks=breaks, col="grey50", border = "grey70", main="Histogram with Normal Curve", ylim = ylim, xlim = xlim) 
+xfit521 <- seq(min(x521),max(x521),length=40) 
+yfit521 <- dnorm(xfit521,mean=mean(x521),sd=sd(x521)) * diff(h521$mids[1:2])*length(x521) 
+lines(xfit521, yfit521, col="blue", lwd=2)
+
+norm_seeds %<>% add_row(feature = "521", var = "width", xfit = xfit521, yfit = yfit521)
+
+x523 <- filter(archseeds, feature == "523")$width
+h523 <- hist(x523, breaks=breaks, col="grey50", border = "grey70", main="Histogram with Normal Curve", ylim = ylim, xlim = xlim) 
+xfit523 <- seq(min(x523),max(x523),length=40) 
+yfit523 <- dnorm(xfit523,mean=mean(x523),sd=sd(x523)) * diff(h523$mids[1:2])*length(x523) 
+lines(xfit523, yfit523, col="green", lwd=2)
+
+norm_seeds %<>% add_row(feature = "523", var = "width", xfit = xfit523, yfit = yfit523)
+
+plot(x520, type = "n", main="Histogram with Normal Curve", ylim = ylim, xlim = xlim)
+lines(xfit520, yfit520, col="red", lwd=2)
+lines(xfit521, yfit521, col="blue", lwd=2)
+lines(xfit523, yfit523, col="green", lwd=2)
+
+boxplot(width ~ feature, data = archseeds)
+
+
+# testa
+
+
+xlim = range(archseeds$testa)
+# ylim = c(0,8)
+# breaks = seq(xlim[1]-0.1,xlim[2]+0.1,by = 0.1)
+interval <- (xlim[2] - xlim[1])/10
+breaks = seq(xlim[1],xlim[2],by = interval)
+
+x520 <- filter(archseeds, feature == "520")$testa
+h520<-hist(x520, breaks=breaks, col="grey50", border = "grey70", main="Histogram with Normal Curve", ylim = ylim, xlim = xlim) 
+xfit520<-seq(min(x520),max(x520),length=40) 
+yfit520<-dnorm(xfit520,mean=mean(x520),sd=sd(x520)) * diff(h520$mids[1:2])*length(x520) 
+lines(xfit520, yfit520, col="red", lwd=2)
+
+norm_seeds %<>% add_row(feature = "520", var = "testa", xfit = xfit520, yfit = yfit520)
+
+x521 <- filter(archseeds, feature == "521")$testa
+h521 <- hist(x521, breaks=breaks, col="grey50", border = "grey70", main="Histogram with Normal Curve", ylim = ylim, xlim = xlim) 
+xfit521 <- seq(min(x521),max(x521),length=40) 
+yfit521 <- dnorm(xfit521,mean=mean(x521),sd=sd(x521)) * diff(h521$mids[1:2])*length(x521) 
+lines(xfit521, yfit521, col="blue", lwd=2)
+
+norm_seeds %<>% add_row(feature = "521", var = "testa", xfit = xfit521, yfit = yfit521)
+
+x523 <- filter(archseeds, feature == "523")$testa
+h523 <- hist(x523, breaks=breaks, col="grey50", border = "grey70", main="Histogram with Normal Curve", ylim = ylim, xlim = xlim) 
+xfit523 <- seq(min(x523),max(x523),length=40) 
+yfit523 <- dnorm(xfit523,mean=mean(x523),sd=sd(x523)) * diff(h523$mids[1:2])*length(x523) 
+lines(xfit523, yfit523, col="green", lwd=2)
+
+norm_seeds %<>% add_row(feature = "523", var = "testa", xfit = xfit523, yfit = yfit523)
+
+plot(x520, type = "n", main="Histogram with Normal Curve", ylim = ylim, xlim = xlim)
+lines(xfit520, yfit520, col="red", lwd=2)
+lines(xfit521, yfit521, col="blue", lwd=2)
+lines(xfit523, yfit523, col="green", lwd=2)
+
+boxplot(testa ~ feature, data = archseeds)
+
+```
+
+```{r archbot3_1, cache = TRUE, fig.cap=" \\label{archbot3}"}
+
+ggplot(archseeds, aes(x = width, color = feature)) +
+  geom_density() +
+  theme_danraywill()
+
+ggplot(archseeds, aes(x = length, color = feature)) +
+  geom_density() +
+  theme_danraywill()
+
+ggplot(archseeds, aes(x = testa, color = feature)) +
+  geom_density() +
+  theme_danraywill()
+
+
+### boxplots
+
+boxplot(width ~ feature, data = archseeds, ylab = "width")
+
+boxplot(length ~ feature, data = archseeds, ylab = "length")
+
+boxplot(testa ~ feature, data = archseeds, ylab = "testa")
+
+### violins
+
+ggplot(archseeds, aes(y = width, x = feature, fill = feature, color = feature)) +
+  geom_violin(trim = T) +
+  theme_danraywill()
+
+ggplot(archseeds, aes(y = length, x = feature, fill = feature, color = feature)) +
+  geom_violin(trim = T) +
+  theme_danraywill()
+
+ggplot(archseeds, aes(y = testa, x = feature, fill = feature, color = feature)) +
+  geom_violin(trim = T) +
+  theme_danraywill()
+
+#normal curves
+
+ggplot(filter(norm_seeds, var == "length"), aes(x = xfit, y = yfit, color = feature)) +
+  geom_line() +
+  labs( x = "length (mm)", y = "density function") +
+  theme_danraywill()
+
+ggplot(filter(norm_seeds, var == "width"), aes(x = xfit, y = yfit, color = feature)) +
+  geom_line() +
+  labs( x = "width (mm)", y = "density function") +
+  theme_danraywill()
+
+ggplot(filter(norm_seeds, var == "testa"), aes(x = xfit, y = yfit, color = feature)) +
+  geom_line() +
+  labs( x = "testa (µm)", y = "density function") +
+  theme_danraywill()
+
+```
+
+```{r contours, fig.asp = 0.33, cache = TRUE, fig.cap=" \\label{contours}"}
+
+archseeds %<>% mutate(mean_diam = (length + width)/2)
+
+ggplot(archseeds, aes(y = testa, x = mean_diam)) +
+  geom_density_2d() +
+  facet_wrap(~feature) +
+  # stat_density_2d(aes(fill = ..level..), geom = "polygon") +
+  theme_danraywill()
+
+```
+
+```{r archnmds, eval=FALSE, cache = TRUE, fig.asp = 1.00, fig.cap=" \\label{archnmds}"}
+
+par(mfrow=c(2,2))
+
+archseeds 
+
+
+arc_mds <- metaMDS(dplyr::select(archseeds, width, length, testa), distance="euc", k=2)
+arc_mds
+arc_mds$stress
+
+archseeds %<>% mutate(nmds1 = arc_mds$points[,1], nmds2 = arc_mds$points[,2])
+
+# iris_euc <- vegan::vegdist(dplyr::select(iris2,-species), method = "euclidean")
+# iris_iso <- isoMDS(iris_euc, trace=0)  ##to compare iso with meta
+# iris_pro <- procrustes(iris_mds, iris_iso)
+# iris_pro
+# plot(iris_pro)  ##huge difference highlights why you use multiple iterations!
+
+# plot(iris_mds, type="t", main=paste("NMDS/Euc - Stress =", round(iris_mds$stress,3)))
+
+#shepards plot
+stressplot(arc_mds, main="Shepard plot")
+
+# cor(dplyr::select(iris2,-species), iris_mds$points)
+# iris_mds$points
+# iris_pl<-plot(iris_mds, dis="sp")
+# plot.window(xlim=c(-3.7,4.1), ylim=c(-2,2),xaxs="r")
+# ordiplot(iris_mds, type="p")
+
+arc_mds_fig <- ordiplot(arc_mds, type = "none", main = "NMDS", ylim = range(unique(arc_mds$points[,2])))
+# plot just the samples, colour by habitat, pch=19 means plot a circle
+points(arc_mds_fig, "sites", pch = 15, cex=0.7,col = "red", select = archseeds$feature == "520")
+points(arc_mds_fig, "sites", pch = 17, cex=0.7,col = "blue", select = archseeds$feature == "521")
+points(arc_mds_fig, "sites", pch = 19, cex=0.7,col = "green", select = archseeds$feature == "523")
+# add confidence ellipses around habitat types
+ordiellipse(arc_mds, archseeds$feature, kind="sd",conf = 0.95, cex=2.0,label = FALSE, col = c("red","blue", "green"))
+
+# PCA
+arc.S <- rda(dplyr::select(archseeds, width, length, testa), scale=TRUE)
+arc.cPCA2 <- scores(arc.S, choices=c(1:2), display="wa", scaling = "species")
+archseeds %<>% mutate(pc1 = arc.cPCA2[,1], pc2 = arc.cPCA2[,2])
+plot(arc.cPCA2, type = "n", main = "PCA")
+points(dplyr::select(filter(archseeds, feature == 520), contains("pc")), pch = 15, cex=0.7,col = "red", select = archseeds$feature == 520)
+points(dplyr::select(filter(archseeds, feature == 521), contains("pc")), pch = 17, cex=0.7,col = "blue", select = archseeds$feature == 521)
+points(dplyr::select(filter(archseeds, feature == 523), contains("pc")), pch = 19, cex=0.7,col = "green", select = archseeds$feature == 523)
+
+
+```
+
+```{r archplot, eval = FALSE, cache = TRUE, fig.asp = 1.00, fig.cap=" \\label{archnmds}"}
+
+par(mfrow=c(1,1))
+
+# archseeds %<>% mutate(mean_diam = (length + width)/2)
+# 
+# ggplot(archseeds, aes(mean_diam, testa, col = feature)) +
+#   geom_point() +
+#   theme_danraywill()
+
+arc_lm <- lm(feature ~ length * width * testa, data = archseeds)
+plot(x = archseeds$feature, y = predict(arc_lm))
+
+```

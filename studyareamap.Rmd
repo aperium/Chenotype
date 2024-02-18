@@ -1,0 +1,117 @@
+---
+title: "Map of the Thesis Study Area and Harvest Locations"
+output: html_notebook
+---
+
+This is an attempt to make a map of the places I harvested and grew *C. berlandieri* vars. I'm using examples from [http://eriqande.github.io/](http://eriqande.github.io/rep-res-web/lectures/making-maps-with-R.html) to make the maps.
+
+```{r setup}
+#for maps
+library(ggplot2)
+library(ggmap)
+library(maps)
+library(mapdata)
+
+library(dplyr)
+library(magrittr)
+
+library(raster)
+library(grid)
+library(gridExtra)
+```
+
+
+```{r}
+theme_bwmap <- function (base_size = 11, base_family = "") 
+{
+    theme_bw(base_size = base_size, base_family = base_family) %+replace% 
+        theme(panel.border = element_rect(fill = NA, colour = "black", size = 1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.key = element_blank(), axis.ticks = element_blank(), axis.text = element_blank(), axis.title = element_blank(), legend.position = "bottom", complete = TRUE)
+}
+
+#get state outlines
+states <- map_data("state")
+
+#get national outlines
+world <- map_data("world")
+
+#get rivers and major lakes
+# rivers <- map_data("rivers")
+
+# get Ohio counties
+counties <- map_data("county")
+oh_county <- subset(counties, region == "ohio")
+
+# get Great Lakes
+lakes <- map_data("lakes") %>%
+  subset(region == "Great Lakes")
+
+# plot labels
+points <- data.frame(long = c(-82.116147), lat = c(39.337679), names = c("Ohio University Plant Biology Learning Gardens"), type = c("plot"), taxon = c("C. missouriense")) %>%
+  full_join(data.frame(long = c(-81.992140), lat = c(39.384345), names = c("Amesville, OH"), type = c("plot"), taxon = c("C. missouriense"))) %>%
+  full_join(data.frame(long = c(-81.937109), lat = c(39.292981), names = c("Guysville, OH"), type = c("collection"), taxon = c("C. missouriense"))) %>%
+  full_join(data.frame(long = c(-82.187340), lat = c(39.461633), names = c("Buchtel, OH"), type = c("collection"), taxon = c("C. missouriense"))) %>%
+  full_join(data.frame(long = c(-85.405663), lat = c(40.197703), names = c("Muncie, IN"), type = c("collection"), taxon = c("C. missouriense"))) %>%
+  full_join(data.frame(long = c(-82.166935), lat = c(39.402947), names = c("Dover Township, OH"), type = c("plot"), taxon = c("C. missouriense"))) %>%
+  full_join(data.frame(long = c(-82.499821), lat = c(39.256860), names = c("McArther, OH"), type = c("collection"), taxon = c("C. missouriense"))) %>%
+  full_join(data.frame(long = c(-82.129486), lat = c(39.333331), names = c("Athens, OH"), type = c("collection"), taxon = c("C. berlandieri var. bushianum"))) %>%
+  full_join(data.frame(long = c(-73.922046), lat = c(42.817162), names = c("Schenectady, NY"), type = c("collection"), taxon = c("C. missouriense"))) %>%
+  full_join(data.frame(long = c(-82.094717), lat = c(39.327144), names = c("Athens, OH"), type = c("collection"), taxon = c("C. missouriense"))) %>%
+  full_join(data.frame(long = c(-85.378094), lat = c(40.230103), names = c("Muncie, IN"), type = c("collection"), taxon = c("C. missouriense"))) %>%
+  full_join(data.frame(long = c(-82.124042), lat = c(39.330030), names = c("Athens, OH"), type = c("collection"), taxon = c("C. missouriense"))) %>%
+  full_join(data.frame(long = c(-82.103544), lat = c(39.328200), names = c("Athens, OH"), type = c("collection"), taxon = c("C. missouriense"))) %>%
+  full_join(data.frame(long = c(-93.90000000), lat = c(41.96666667), names = c("Boone, Iowa"), type = c("accession"), taxon = c("C. berlandieri"))) %>%
+  full_join(data.frame(long = c(-90.60000000), lat = c(39.28333333), names = c("Kampsville, Illinois"), type = c("accession"), taxon = c("C. berlandieri var. bushianum"))) %>%
+  full_join(data.frame(long = c(-88.12640000), lat = c(30.34130000), names = c("Dauphin Island, AL"), type = c("accession"), taxon = c("C. berlandieri var. boscianum"))) %>%
+  full_join(data.frame(long = c(-91.85000000), lat = c(29.73333333), names = c("Cypremort Point, LA"), type = c("accession"), taxon = c("C. berlandieri var. boscianum"))) %>%
+  full_join(data.frame(long = c(-89.04430000), lat = c(30.37720000), names = c("Gulfport, MI"), type = c("accession"), taxon = c("C. berlandieri var. boscianum"))) %>%
+  full_join(data.frame(long = c(-70.38333333), lat = c(43.48333333), names = c("Saco, ME"), type = c("accession"), taxon = c("C. berlandieri var. macrocalycium"))) %>%
+  filter(type != "plot")
+
+insert_limits <- tibble(long = c(-82.29, -81.73), lat = c(39.195, 39.565))
+
+ena_map <- ggplot() + 
+  # geom_path(data = rivers, aes(x=long, y = lat, group = group), fill = NA, color = "blue") +
+  geom_polygon(data = states, aes(x=long, y = lat, group = group), fill = NA, color = "grey30") + 
+  geom_polygon(data = world, aes(x=long, y = lat, group = group), fill = NA, color = "grey10") +
+  geom_polygon(data = lakes, aes(x=long, y = lat, group = group), fill = "white", color = "grey10") +
+  geom_point(data = points, aes(x=long, y = lat, group = type, shape = type), color = "firebrick3", stroke = 2, size = 2.5) +
+  geom_rect(data = insert_limits, aes(xmin = long[2], xmax = long[1], ymin = lat[1], ymax = lat[2]), fill = "white", alpha = 0, color = "black", show.legend = FALSE) +
+  geom_line(data = insert_limits, aes(x = c(long[1],-74.8), y = c(lat[1],28.5))) +
+  geom_line(data = insert_limits, aes(x = c(long[2],-64), y = c(lat[2],35.6))) +
+  coord_fixed(xlim = c(-95, -65),  ylim = c(29, 47), ratio = 1.3) +
+  scale_shape_manual(values = c("accession" = 1, "collection" = 19)) +
+  # scale_color_gradient(low = munsell::mnsl("5R 3/8"), high = munsell::mnsl("2.5Y 6/8"), space = "Lab")
+  theme_bwmap()
+ena_map
+
+athens_map <- ggplot() +
+  # geom_path(data = rivers, aes(x=long, y = lat, group = group), fill = NA, color = "blue") +
+  geom_polygon(data = oh_county, aes(x=long, y = lat, group = group), fill = NA, color = "grey50") +
+  geom_polygon(data = states, aes(x=long, y = lat, group = group), fill = NA, color = "grey30") +
+  geom_point(data = points, aes(x=long, y = lat, group = type, shape = type), stroke = 2, color = "firebrick3", size = 2.0) +
+  # coord_fixed(xlim = c(-82.5, -81.65),  ylim = c(39.1, 39.67), ratio = 1.3) +
+  coord_fixed(xlim = c(-82.29, -81.73),  ylim = c(39.195, 39.565), ratio = 1.3) +
+  scale_shape_manual(values = c("collection" = 19, "accession" = 1)) +
+  theme_bwmap()
+
+
+# ggmapdata <- get_map(location = c(-80, 38), maptype = "terrain", source = "google", zoom = 5, color = "bw")
+# ggmap(ggmapdata)
+```
+
+Now I'm trying to make the Athens map as an insert to ENA map. Borrowing from [r-bloggers.com/](https://www.r-bloggers.com/creating-inset-map-with-ggplot2/)
+
+```{r}
+
+athens_map <- athens_map +
+  theme(legend.position="none", plot.background = element_blank())
+
+png(file="figures/studyarea.png",w=1800,h=1800, res=300)
+grid.newpage()
+v1<-viewport(width = 1, height = 1, x = 0.5, y = 0.5) #plot area for the main map
+v2<-viewport(width = .35, height = 0.35, x = 0.81, y = 0.32) #plot area for the inset map
+print(ena_map,vp=v1) 
+print(athens_map,vp=v2)
+dev.off()
+```
+

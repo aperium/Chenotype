@@ -1,0 +1,230 @@
+---
+title: "Summary PCA"
+output: html_notebook
+---
+
+```{r setup}
+#load libraries
+library(tidyverse)
+library(magrittr)
+library(ggplot2)
+
+library(ade4)
+library(vegan)
+library(gclus)
+library(ape)
+
+# special libararies only availible in source form
+source("/Users/aperium/Dropbox/Old Projects/MSES/CLasses/Bios 8700 - Biostats II/WorkingDirectory/bookscripts/evplot2.R")
+source("/Users/aperium/Dropbox/Old Projects/MSES/CLasses/Bios 8700 - Biostats II/WorkingDirectory/multiplot.R")
+source("/Users/aperium/Dropbox/Old Projects/MSES/CLasses/Bios 8700 - Biostats II/WorkingDirectory/evmultiplot.R")
+
+source("/users/aperium/Dropbox/Old Projects/MSES/CLasses/Bios 8700 - Biostats II/WorkingDirectory/bookscripts/HighstatLibV10.R")
+
+library(knitr)
+#fig.asp=0.618
+knitr::opts_chunk$set(echo=FALSE, message = FALSE, warning = FALSE, results = 'markdown', tidy=TRUE, fig.asp=0.618)
+
+```
+
+```{r data_import}
+
+populations_data <- read_csv("/users/aperium/Dropbox/Projects/Chenopodium/Data/populations_summary_data.csv") %>%
+  select(shortcode:BL_50_mass)
+
+morphcounts <- read_csv("/users/aperium/Dropbox/Projects/Chenopodium/Data/Morphcounts/morphcounts.csv") %>%
+  select( -parental_population) %>%
+  group_by(population) %>%
+  summarise(n_samples = n(), lr_sum = sum(light_red), dr_sum = sum(dark_red), bl_sum = sum(black)) %>%
+  mutate(
+    rd_sum = lr_sum + dr_sum, 
+    n_morphratio_seeds = lr_sum + dr_sum + bl_sum
+  ) %>%
+  mutate(
+    lr_morphratio = lr_sum / n_morphratio_seeds,
+    dr_morphratio = dr_sum / n_morphratio_seeds,
+    bl_morphratio = bl_sum / n_morphratio_seeds,
+    rd_morphratio = rd_sum / n_morphratio_seeds
+  ) %>%
+  select(-(n_samples:rd_sum)) %>%
+  ungroup() %>%
+  mutate(population = ifelse(population %in% populations_data$shortcode, population, 
+                             ifelse(population %in% populations_data$longcode,
+                                    populations_data$shortcode[match(population, populations_data$longcode)],
+                                    ifelse(population %in% populations_data$oldcode,
+                                           populations_data$shortcode[match(population, populations_data$old)],
+                                           population))))
+  
+populations_data %<>% 
+  full_join(morphcounts, by = c("shortcode"="population")) %>%
+  filter( !is.na(shortcode) )
+
+morphology <- read_csv("/users/aperium/Dropbox/Projects/Chenopodium/Data/Bisected seeds/bisectedseeds.csv") %>%
+  select(-X33) %>%
+  mutate(
+    id_number = as.factor(id_number),
+    outer_epiderm_mean = rowMeans(.[grep("outer_epiderm", names(.))], na.rm = TRUE),
+    inner_epiderm_mean = rowMeans(.[grep("inner_epiderm", names(.))], na.rm = TRUE),
+    pericarp_mean = rowMeans(.[grep("pericarp_", names(.))], na.rm = TRUE)
+  ) %>% 
+  mutate( combined_epiderm_mean = rowSums(.[grep("epiderm_mean", names(.))], na.rm = TRUE)) %>%
+  mutate(
+    outer_epiderm_mean = ifelse(outer_epiderm_mean != 0, outer_epiderm_mean, NA),
+    inner_epiderm_mean = ifelse(inner_epiderm_mean != 0, inner_epiderm_mean, NA),
+    combined_epiderm_mean = ifelse(combined_epiderm_mean != 0, combined_epiderm_mean, NA),
+    pericarp_mean = ifelse(pericarp_mean != 0, pericarp_mean, NA)
+  ) %>%
+  # seed volume in cubic mm
+  mutate(volume = 4.0 / 3 * 3.141592653589 * length/2 * width/2 * height/2 / 1000^3) %>%
+  mutate(embryo_volume = 3.141592653589^2 * 
+           (cotyledon_thickness+radical_thickness)/4 * 
+           (cotyledon_width+radical_width)/4 *
+           ((length+width)/2-(cotyledon_thickness+radical_thickness)/2-2*combined_epiderm_mean) / 1000^3
+         ) %>%
+  mutate(perisperm_and_embryo_volume = 
+           ifelse(is.na(outer_epiderm_mean) | is.na(inner_epiderm_mean) | is.na(adherant_pericarp), NA , 
+             ifelse(adherant_pericarp == "yes" | !is.na(pericarp_mean), 
+                    (4.0 / 3 * 3.141592653589 * (length-2*(pericarp_mean+outer_epiderm_mean+inner_epiderm_mean))/2 * (width-2*(pericarp_mean+outer_epiderm_mean+inner_epiderm_mean))/2 * (height-2*(pericarp_mean+outer_epiderm_mean+inner_epiderm_mean))/2 / 1000^3),
+               ifelse( adherant_pericarp == "no", 
+                      (4.0 / 3 * 3.141592653589 *    (length-2*(outer_epiderm_mean+inner_epiderm_mean))/2 * (width-2*(outer_epiderm_mean+inner_epiderm_mean))/2 * (height-2*(outer_epiderm_mean+inner_epiderm_mean))/2 / 1000^3),
+                      NA
+  )))) %>%
+  mutate(perisperm_volume = perisperm_and_embryo_volume - embryo_volume) %>%
+  rename(color = color_bin) %>%
+  mutate(color = case_when(
+    color == "dr" ~ "darkred",
+    color == "DR" ~ "darkred",
+    color == "lr" ~ "lightred",
+    color == "LR" ~ "lightred",
+    TRUE ~ color
+  )) %>%
+  select( -texture, -(length:cotyledon_thickness)) %>%
+  mutate(population = ifelse(population %in% populations_data$shortcode, population, 
+                             ifelse(population %in% populations_data$longcode,
+                                    populations_data$shortcode[match(population, populations_data$longcode)],
+                                    ifelse(population %in% populations_data$oldcode,
+                                           populations_data$shortcode[match(population, populations_data$old)],
+                                           population)))) %>%
+  mutate(seed_category = ifelse(species == "berlandieri", color, species)) %>%   
+  mutate(seed_category = case_when(
+    seed_category == "lightred" ~ "red",
+    seed_category == "darkred"  ~ "red",
+    TRUE ~ seed_category
+  )) %>% 
+  mutate(seed_category = factor(seed_category, levels = unique(seed_category[order(case_when(
+    seed_category == "album"         ~ 1,
+    seed_category == "black"         ~ 2,
+    seed_category == "lightred"      ~ 3,
+    seed_category == "darkred"       ~ 4,
+    seed_category == "red"           ~ 5,
+    seed_category == "nuttalliae"    ~ 6,
+    seed_category == "quinoa"        ~ 7,
+    seed_category == "macrocalycium" ~ 8
+  ))])))
+
+  # summarize for joining to summary table
+morphology_summary <- morphology %>%
+  group_by(population, seed_category, color, maturity) %>%
+  summarise(
+    n_morphology = n(),
+    outer_epiderm_quant_0 = quantile(outer_epiderm_mean, 0, na.rm = TRUE, type = 9),
+    outer_epiderm_quant_1 = quantile(outer_epiderm_mean, 1/4, na.rm = TRUE, type = 9),
+    outer_epiderm_quant_2 = quantile(outer_epiderm_mean, 2/4, na.rm = TRUE, type = 9),
+    outer_epiderm_quant_3 = quantile(outer_epiderm_mean, 3/4, na.rm = TRUE, type = 9),
+    outer_epiderm_quant_4 = quantile(outer_epiderm_mean, 4/4, na.rm = TRUE, type = 9),
+    outer_epiderm_IQR = IQR(outer_epiderm_mean, na.rm = TRUE, type = 9),
+    outer_epiderm_sd = sd(outer_epiderm_mean, na.rm = TRUE),
+    outer_epiderm_var = var(outer_epiderm_mean, na.rm = TRUE, use = "na.or.complete"),
+    outer_epiderm_mean = mean(outer_epiderm_mean, na.rm = TRUE),
+    inner_epiderm_quant_0 = quantile(inner_epiderm_mean, 0, na.rm = TRUE, type = 9),
+    inner_epiderm_quant_1 = quantile(inner_epiderm_mean, 1/4, na.rm = TRUE, type = 9),
+    inner_epiderm_quant_2 = quantile(inner_epiderm_mean, 2/4, na.rm = TRUE, type = 9),
+    inner_epiderm_quant_3 = quantile(inner_epiderm_mean, 3/4, na.rm = TRUE, type = 9),
+    inner_epiderm_quant_4 = quantile(inner_epiderm_mean, 4/4, na.rm = TRUE, type = 9),
+    inner_epiderm_IQR = IQR(inner_epiderm_mean, na.rm = TRUE, type = 9),
+    inner_epiderm_sd = sd(inner_epiderm_mean, na.rm = TRUE),
+    inner_epiderm_var = var(inner_epiderm_mean, na.rm = TRUE, use = "na.or.complete"),
+    inner_epiderm_mean = mean(inner_epiderm_mean, na.rm = TRUE),
+    pericarp_quant_0 = quantile(pericarp_mean, 0, na.rm = TRUE, type = 9),
+    pericarp_quant_1 = quantile(pericarp_mean, 1/4, na.rm = TRUE, type = 9),
+    pericarp_quant_2 = quantile(pericarp_mean, 2/4, na.rm = TRUE, type = 9),
+    pericarp_quant_3 = quantile(pericarp_mean, 3/4, na.rm = TRUE, type = 9),
+    pericarp_quant_4 = quantile(pericarp_mean, 4/4, na.rm = TRUE, type = 9),
+    pericarp_IQR = IQR(pericarp_mean, na.rm = TRUE, type = 9),
+    pericarp_sd = sd(pericarp_mean, na.rm = TRUE),
+    pericarp_var = var(pericarp_mean, na.rm = TRUE, use = "na.or.complete"),
+    pericarp_mean = mean(pericarp_mean, na.rm = TRUE),
+    seed_volume_quant_0 = quantile(volume, 0, na.rm = TRUE, type = 9),
+    seed_volume_quant_1 = quantile(volume, 1/4, na.rm = TRUE, type = 9),
+    seed_volume_quant_2 = quantile(volume, 2/4, na.rm = TRUE, type = 9),
+    seed_volume_quant_3 = quantile(volume, 3/4, na.rm = TRUE, type = 9),
+    seed_volume_quant_4 = quantile(volume, 4/4, na.rm = TRUE, type = 9),
+    seed_volume_IQR = IQR(volume, na.rm = TRUE, type = 9),
+    seed_volume_sd = sd(volume, na.rm = TRUE),
+    seed_volume_var = var(volume, na.rm = TRUE, use = "na.or.complete"),
+    seed_volume_mean = mean(volume, na.rm = TRUE),
+    embryo_volume_quant_0 = quantile(embryo_volume, 0, na.rm = TRUE, type = 9),
+    embryo_volume_quant_1 = quantile(embryo_volume, 1/4, na.rm = TRUE, type = 9),
+    embryo_volume_quant_2 = quantile(embryo_volume, 2/4, na.rm = TRUE, type = 9),
+    embryo_volume_quant_3 = quantile(embryo_volume, 3/4, na.rm = TRUE, type = 9),
+    embryo_volume_quant_4 = quantile(embryo_volume, 4/4, na.rm = TRUE, type = 9),
+    embryo_volume_IQR = IQR(embryo_volume, na.rm = TRUE, type = 9),
+    embryo_volume_sd = sd(embryo_volume, na.rm = TRUE),
+    embryo_volume_var = var(embryo_volume, na.rm = TRUE, use = "na.or.complete"),
+    embryo_volume_mean = mean(embryo_volume, na.rm = TRUE),
+    persperm_volume_quant_0 = quantile(perisperm_volume, 0, na.rm = TRUE, type = 9),
+    persperm_volume_quant_1 = quantile(perisperm_volume, 1/4, na.rm = TRUE, type = 9),
+    persperm_volume_quant_2 = quantile(perisperm_volume, 2/4, na.rm = TRUE, type = 9),
+    persperm_volume_quant_3 = quantile(perisperm_volume, 3/4, na.rm = TRUE, type = 9),
+    persperm_volume_quant_4 = quantile(perisperm_volume, 4/4, na.rm = TRUE, type = 9),
+    persperm_volume_IQR = IQR(perisperm_volume, na.rm = TRUE, type = 9),
+    persperm_volume_sd = sd(perisperm_volume, na.rm = TRUE),
+    persperm_volume_var = var(perisperm_volume, na.rm = TRUE, use = "na.or.complete"),
+    persperm_volume_mean = mean(perisperm_volume, na.rm = TRUE),
+    interior_volume_quant_0 = quantile(perisperm_and_embryo_volume, 0, na.rm = TRUE, type = 9),
+    interior_volume_quant_1 = quantile(perisperm_and_embryo_volume, 1/4, na.rm = TRUE, type = 9),
+    interior_volume_quant_2 = quantile(perisperm_and_embryo_volume, 2/4, na.rm = TRUE, type = 9),
+    interior_volume_quant_3 = quantile(perisperm_and_embryo_volume, 3/4, na.rm = TRUE, type = 9),
+    interior_volume_quant_4 = quantile(perisperm_and_embryo_volume, 4/4, na.rm = TRUE, type = 9),
+    interior_volume_IQR = IQR(perisperm_and_embryo_volume, na.rm = TRUE, type = 9),
+    interior_volume_sd = sd(perisperm_and_embryo_volume, na.rm = TRUE),
+    interior_volume_var = var(perisperm_and_embryo_volume, na.rm = TRUE, use = "na.or.complete"),
+    interior_volume_mean = mean(perisperm_and_embryo_volume, na.rm = TRUE)
+  ) %>%
+# counts for morphstats
+full_join(count(filter(morphology,!is.na(outer_epiderm_mean)),population,color,maturity)%>%rename(n_outer_epiderm=n)) %>%
+full_join(count(filter(morphology,!is.na(inner_epiderm_mean)),population,color,maturity)%>%rename(n_inner_epiderm=n)) %>%
+full_join(count(filter(morphology,!is.na(pericarp_mean)),population,color,maturity)%>%rename(n_pericarp=n)) %>%
+full_join(count(filter(morphology,!is.na(volume)),population,color,maturity)%>%rename(n_seed_volume=n)) %>%
+full_join(count(filter(morphology,!is.na(embryo_volume)),population,color,maturity)%>%rename(n_embryo_volume=n)) %>%
+full_join(count(filter(morphology,!is.na(perisperm_volume)),population,color,maturity)%>%rename(n_perisperm_volume=n)) %>%
+full_join(count(filter(morphology,!is.na(perisperm_and_embryo_volume)),population,color,maturity)%>%rename(n_interior_volume=n)) %>%
+full_join(
+  count(filter(morphology,!is.na(maturity) & !is.nan(maturity) & maturity != "?"),population,color) %>% rename(n_maturity = n) %>% 
+    left_join(count(filter(morphology,maturity == "mature"),population,color) %>% rename(n_mature = n)) %>%
+    transmute(population, color, proportion_mature = n_mature / n_maturity, n_maturity) %>%
+    mutate( proportion_mature = ifelse(!is.na(proportion_mature) & n_maturity>0,proportion_mature,0))
+  )
+
+color_50_seed_masses <- populations_data %>%
+  select(shortcode, LR_50_mass:BL_50_mass) %>%
+  gather(key = "color", value = "mass_50_seeds", LR_50_mass:BL_50_mass, na.rm = F) %>%
+  filter(mass_50_seeds > 0) %>%
+  mutate( color = case_when(
+    color == "LR_50_mass" ~ "lightred",
+    color == "DR_50_mass" ~ "darkred",
+    color == "BL_50_mass" ~ "black",
+    TRUE ~ color
+  ))
+
+joined_data <- populations_data %>%
+  select( -(LR_50_mass:BL_50_mass)) %>%
+  left_join(morphology_summary, by = c("shortcode" = "population")) %>%
+  left_join(color_50_seed_masses)
+
+## join summarised strat-germ data (germination rate at each stratification, max germination, sumary stats for days to germinate at each strat period)
+  
+```
+
+
+

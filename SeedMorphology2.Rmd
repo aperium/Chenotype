@@ -1,0 +1,539 @@
+---
+title: "Seed Morphology 2"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+
+
+library(ade4)
+library(vegan)
+library(gclus)
+library(ape)
+
+# special libararies only availible in source form
+source("/Users/aperium/Dropbox/Projects/MSES/CLasses/Bios 8700 - Biostats II/WorkingDirectory/bookscripts/evplot2.R")
+source("/Users/aperium/Dropbox/Projects/MSES/CLasses/Bios 8700 - Biostats II/WorkingDirectory/multiplot.R")
+source("/Users/aperium/Dropbox/Projects/MSES/CLasses/Bios 8700 - Biostats II/WorkingDirectory/evmultiplot.R")
+
+source("/users/aperium/Dropbox/Projects/MSES/CLasses/Bios 8700 - Biostats II/WorkingDirectory/bookscripts/HighstatLibV10.R")
+
+library(knitr)
+#fig.asp=0.618
+knitr::opts_chunk$set(echo=FALSE, message = FALSE, warning = FALSE, results = 'markdown', tidy=TRUE, fig.asp=0.618)
+
+#load libraries
+library(tidyverse)
+library(magrittr)
+library(ggplot2)
+
+```
+
+```{r}
+#seed morphological data from the microscope bisections
+morphology <- read_csv("/users/aperium/Dropbox/Projects/Chenopodium/Data/Bisected seeds/bisectedseeds.csv") %>%
+  dplyr::select(-X33) %>%
+  mutate(
+    id_number = as.factor(id_number),
+    outer_epiderm_mean = rowMeans(.[grep("outer_epiderm", names(.))], na.rm = TRUE),
+    inner_epiderm_mean = rowMeans(.[grep("inner_epiderm", names(.))], na.rm = TRUE),
+    pericarp_mean = rowMeans(.[grep("pericarp_", names(.))], na.rm = TRUE)
+  ) %>% 
+  mutate( combined_epiderm_mean = rowSums(.[grep("epiderm_mean", names(.))], na.rm = TRUE)) %>%
+  mutate(
+    outer_epiderm_mean = ifelse(outer_epiderm_mean != 0, outer_epiderm_mean, NA),
+    inner_epiderm_mean = ifelse(inner_epiderm_mean != 0, inner_epiderm_mean, NA),
+    combined_epiderm_mean = ifelse(combined_epiderm_mean != 0, combined_epiderm_mean, NA),
+    pericarp_mean = ifelse(pericarp_mean != 0, pericarp_mean, NA)
+  ) %>%
+  # seed volume in cubic mm
+  mutate(volume = 4.0 / 3 * 3.141592653589 * length/2 * width/2 * height/2 / 1000^3) %>%
+  mutate(embryo_volume = 3.141592653589^2 * 
+           (cotyledon_thickness+radical_thickness)/4 * 
+           (cotyledon_width+radical_width)/4 *
+           ((length+width)/2-(cotyledon_thickness+radical_thickness)/2-2*combined_epiderm_mean) / 1000^3
+         ) %>%
+  mutate(perisperm_and_embryo_volume = 
+           ifelse(is.na(outer_epiderm_mean) | is.na(inner_epiderm_mean) | is.na(adherant_pericarp), NA , 
+             ifelse(adherant_pericarp == "yes" | !is.na(pericarp_mean), 
+                    (4.0 / 3 * 3.141592653589 * (length-2*(pericarp_mean+outer_epiderm_mean+inner_epiderm_mean))/2 * (width-2*(pericarp_mean+outer_epiderm_mean+inner_epiderm_mean))/2 * (height-2*(pericarp_mean+outer_epiderm_mean+inner_epiderm_mean))/2 / 1000^3),
+               ifelse( adherant_pericarp == "no", 
+                      (4.0 / 3 * 3.141592653589 *    (length-2*(outer_epiderm_mean+inner_epiderm_mean))/2 * (width-2*(outer_epiderm_mean+inner_epiderm_mean))/2 * (height-2*(outer_epiderm_mean+inner_epiderm_mean))/2 / 1000^3),
+                      NA
+  )))) %>%
+  mutate(perisperm_volume = perisperm_and_embryo_volume - embryo_volume) %>%
+  rename(color = color_bin) %>%
+  mutate(color = case_when(
+    color == "dr" ~ "darkred",
+    color == "DR" ~ "darkred",
+    color == "lr" ~ "lightred",
+    color == "LR" ~ "lightred",
+    TRUE ~ color
+  )) %>%
+  dplyr::select( -texture, -(pericarp_1:cotyledon_thickness)) %>%
+  mutate(population = case_when(
+    population == "WestState3" ~ "B3",
+    population == "BentBrook1" ~ "B5",
+    population == "BentBrook4" ~ "B8",
+    population == "Sabrina2"   ~ "B12",
+    population == "Sabrina4"   ~ "B14",
+    population == "WayneHq2"   ~ "B17",
+    population == "McArthur1"  ~ "B19",
+    population == "EastUnion2" ~ "B25",
+    population == "Muncie3"    ~ "B31",
+    population == "Buchtel1"   ~ "B33",
+    population == "Athens0001" ~ "B35",
+    population == "SouthHigh1" ~ "B72",
+    population == "CbbWayneHq1-17" ~ "N3",
+    TRUE ~ population
+  )) %>%
+  mutate(seed_category = ifelse(species == "berlandieri", color, species)) %>%   
+  mutate(seed_category = case_when(
+    seed_category == "lightred" ~ "red",
+    seed_category == "darkred"  ~ "red",
+    TRUE ~ seed_category
+  )) %>% 
+  mutate(seed_category = factor(seed_category, levels = unique(seed_category[order(case_when(
+    seed_category == "album"         ~ 1,
+    seed_category == "black"         ~ 2,
+    seed_category == "lightred"      ~ 3,
+    seed_category == "darkred"       ~ 4,
+    seed_category == "red"           ~ 5,
+    seed_category == "nuttalliae"    ~ 6,
+    seed_category == "quinoa"        ~ 7,
+    seed_category == "macrocalycium" ~ 8
+  ))])))
+
+# need to combine lr and dr
+
+#get the morph ratio data and format the data for adjusting germination data
+morphcounts <- read_csv("/users/aperium/Dropbox/Projects/Chenopodium/Data/Morphcounts/morphcounts.csv") %>%
+  mutate(population = case_when(
+    population == "WestState3" ~ "B3",
+    population == "BentBrook1" ~ "B5",
+    population == "BentBrook4" ~ "B8",
+    population == "Sabrina2"   ~ "B12",
+    population == "Sabrina4"   ~ "B14",
+    population == "WayneHq2"   ~ "B17",
+    population == "McArthur1"  ~ "B19",
+    population == "EastUnion2" ~ "B25",
+    population == "Muncie3"    ~ "B31",
+    population == "Buchtel1"   ~ "B33",
+    population == "Athens0001" ~ "B35",
+    population == "SouthHigh1" ~ "B72",
+    population == "CbbWayneHq1-17" ~ "N3",
+    TRUE ~ population
+  )) %>% 
+  filter(   population == "B3" |
+            population == "B5" |
+            population == "B8" |
+            population == "B12" |
+            population == "B14" |
+            population == "B17" |
+            population == "B19" |
+            population == "B25" |
+            population == "B31" |
+            population == "B33" |
+            population == "B35" |
+            population == "B72"
+            ) %>%
+   dplyr::select(population:black,-sample) %>%
+  
+  # grouping rows based on population
+  group_by(population) %>% 
+  summarise_at(vars(light_red,dark_red,black),funs(sum)) %>%
+  # making new columns
+  ungroup() %<>% mutate(
+                red = light_red + dark_red,
+                total = light_red + dark_red + black,
+                red_proportion = red / total,
+                black_proportion = black / total,
+                light_red_proportion = light_red / total,
+                dark_red_proportion = dark_red / total
+                ) %>%
+ 
+  # organizing the data
+  gather(key = "color", value = "morphproportion",red_proportion:dark_red_proportion) %>%
+  dplyr::select(population, color, morphproportion) %>%
+  mutate( color = case_when(
+    color == "red_proportion" ~ "rd",
+    color == "light_red_proportion" ~ "lr",
+    color == "dark_red_proportion" ~ "dr",
+    color == "black_proportion" ~ "bl",
+    TRUE ~ color
+  )) %>%
+  
+  mutate(
+    color = as.factor(color),
+    population = as.factor(population)
+  )
+
+red_adj_values <- morphcounts %>%
+  spread(color,morphproportion)  %>%
+  transmute(population, 
+            darkred = dr/rd,
+            lightred = lr/rd) %>%
+  gather(key = color, value = rd_rel_prop, 2:3)
+
+
+```
+
+```{r}
+morph2 <- morphology %>% 
+  # mutate(seed_category = ifelse(species == "berlandieri", color, species)) %>%  
+  # mutate(seed_category = factor(seed_category, levels = unique(seed_category[order(case_when(
+  #   seed_category == "album"         ~ 1,
+  #   seed_category == "black"         ~ 2,
+  #   seed_category == "lightred"      ~ 3,
+  #   seed_category == "darkred"       ~ 4,
+  #   seed_category == "red"           ~ 5,
+  #   seed_category == "nuttalliae"    ~ 6,
+  #   seed_category == "quinoa"        ~ 7,
+  #   seed_category == "macrocalycium" ~ 8
+  # ))]))) %>%
+  filter(maturity == "mature")
+
+# VOLUME
+morph2 %>%
+  filter(!is.na(volume) & !is.nan(volume)) %>%
+ggplot(aes(x = seed_category, y = volume)) +
+  geom_boxplot() +
+  xlab("seed morph") + ylab("seed volume (mm^3)") +
+  scale_y_continuous(limits = c(0,4), breaks = c(0,1*1:4)) +
+  scale_x_discrete(expand = c(0.05, 0.05)) +
+  theme_minimal()
+
+# Outer Epiderm
+morph2 %>%
+  filter(!is.na(outer_epiderm_mean) & !is.nan(outer_epiderm_mean)) %>%
+ggplot(aes(x = seed_category, y = outer_epiderm_mean)) +
+  geom_boxplot() +
+  xlab("seed morph") + ylab("outer epiderm (µm)") +
+  scale_y_continuous(limits = c(0,55), breaks = c(0,10*1:5)) +
+  scale_x_discrete(expand = c(0.05, 0.05)) +
+  theme_minimal()
+
+# inner Epiderm
+morph2 %>%
+  filter(!is.na(inner_epiderm_mean) & !is.nan(inner_epiderm_mean)) %>%
+ggplot(aes(x = seed_category, y = inner_epiderm_mean)) +
+  geom_boxplot() +
+  xlab("seed morph") + ylab("inner epiderm (µm)") +
+  scale_y_continuous(limits = c(0,55), breaks = c(0,10*1:5)) +
+  scale_x_discrete(expand = c(0.05, 0.05)) +
+  theme_minimal()
+
+# pericarp
+morph2 %>%
+  filter(!is.na(pericarp_mean) & !is.nan(pericarp_mean)) %>%
+ggplot(aes(x = seed_category, y = pericarp_mean)) +
+  geom_boxplot() +
+  xlab("seed morph") + ylab("pericarp (µm)") +
+  scale_y_continuous(limits = c(0,25), breaks = c(0,5*1:5)) +
+  scale_x_discrete(expand = c(0.05, 0.05)) +
+  theme_minimal()
+
+# embryo VOLUME
+morph2 %>%
+  filter(!is.na(embryo_volume) & !is.nan(embryo_volume)) %>%
+ggplot(aes(x = seed_category, y = embryo_volume)) +
+  geom_boxplot() +
+  xlab("seed morph") + ylab("embryo volume (mm^3)") +
+  scale_y_continuous(limits = c(0,1.025), breaks = c(0,0.25*1:4)) +
+  scale_x_discrete(expand = c(0.05, 0.05)) +
+  theme_minimal()
+
+# seed interior VOLUME
+morph2 %>%
+  filter(!is.na(perisperm_and_embryo_volume) & !is.nan(perisperm_and_embryo_volume)) %>%
+ggplot(aes(x = seed_category, y = perisperm_and_embryo_volume)) +
+  geom_boxplot() +
+  xlab("seed morph") + ylab("interior volume (mm^3)") +
+  scale_y_continuous(limits = c(0,3.5), breaks = c(0,0.5*1:7)) +
+  scale_x_discrete(expand = c(0.05, 0.05)) +
+  theme_minimal()
+
+# perisperm VOLUME
+morph2 %>%
+  filter(!is.na(perisperm_volume) & !is.nan(perisperm_volume) & perisperm_volume >= 0) %>%
+ggplot(aes(x = seed_category, y = perisperm_volume)) +
+  geom_boxplot() +
+  xlab("seed morph") + ylab("perisperm volume (mm^3)") +
+  scale_y_continuous(limits = c(0,2.5), breaks = c(0,0.5*1:5)) +
+  scale_x_discrete(expand = c(0.05, 0.05)) +
+  theme_minimal()
+
+```
+
+
+```{r pca}
+
+# dispersion matrix
+
+is_type_numeric <- function(x) all(is_numeric(x))
+is_not_empty <- function(x) all(x != "" | !is.na(x) | !is.nan(x))
+
+morphology_trimmed_for_PCA <- morphology  %>%
+  mutate(seed_category = ifelse(species == "berlandieri", color, species)) %>%  
+  mutate(seed_category = case_when(
+    seed_category == "lightred" ~ "red",
+    seed_category == "darkred"  ~ "red",
+    TRUE ~ seed_category
+  )) %>%
+  mutate(seed_category = factor(seed_category, levels = unique(seed_category[order(case_when(
+    seed_category == "album"         ~ 1,
+    seed_category == "black"         ~ 2,
+    seed_category == "red"           ~ 3,
+    seed_category == "nuttalliae"    ~ 4,
+    seed_category == "quinoa"        ~ 5,
+    seed_category == "macrocalycium" ~ 6
+  ))]))) %>%
+  # dplyr::select(-combined_epiderm_mean, -(year:adherant_pericarp), -(length:height), -perisperm_and_embryo_volume, -volume, -pericarp_mean, -inner_epiderm_mean) %>%
+  dplyr::select(-combined_epiderm_mean, -perisperm_and_embryo_volume, -volume, -perisperm_volume, -fifty_weight, -year) %>%
+  select_if( is_not_empty) %>%
+  filter_all( all_vars(!is_numeric(.) | !is.na(.))) %>%
+  filter(seed_category != "album")
+  
+morphology.S <- morphology_trimmed_for_PCA %>%
+  dplyr::select_if(is_type_numeric) %>%
+  dplyr::select( -id_number, -seed_category ) %>%
+  rda(scale=T, na.action = na.omit)
+
+morphology.PCA <- scores(morphology.S, choices=c(1:3), display="wa", scaling = "species")
+
+ev1<-morphology.S$CA$eig
+ev1[ev1>mean(ev1)]
+evplot(ev1)
+
+biplot(morphology.S, choices=c(1,2), scaling = 2, main="", display="species", col = "black", ylim = c(-2,2), xlim = c(-2,2)) #angles reflect corelations
+biplot(morphology.S, choices=c(1,3), scaling = 2, main="", display="species", col = "black", ylim = c(-2,2), xlim = c(-2,2)) #angles reflect corelations
+biplot(morphology.S, choices=c(2,3), scaling = 2, main="", display="species", col = "black", ylim = c(-2,2), xlim = c(-2,2)) #angles reflect corelations
+
+# colors <- c("grey80","grey20","firebrick","gold","green","blue")
+# colors <- c("grey20","firebrick","gold","green","blue")
+colors <- grey.colors(5, start = 0, end = 0.6, gamma = 2.2, alpha = NULL)
+colors <- c(colors[1],colors[5:2])
+# shapes <- c(3,0,1,2,5)
+shapes <- c(10,13,4,8,3)
+
+gg1<-ggplot(morphology_trimmed_for_PCA, aes(morphology.PCA[,1],morphology.PCA[,2], color = seed_category, shape=seed_category))+
+  geom_point(size = 2, stroke = 1.125) +
+  stat_ellipse(segments = 102) +
+  scale_color_manual(values = colors) +
+  scale_shape_manual(values = shapes) +
+  labs(y="PC2", x= "PC1") +
+  theme_minimal()
+gg2<-ggplot(morphology_trimmed_for_PCA, aes(morphology.PCA[,1],morphology.PCA[,3], color = seed_category, shape=seed_category))+
+  geom_point(size = 2, stroke = 1.125) +
+  stat_ellipse(segments = 102) +
+  scale_color_manual(values = colors) +
+  scale_shape_manual(values = shapes) +
+  labs(y="PC3", x= "PC1") +
+  theme_minimal()
+gg3<-ggplot(morphology_trimmed_for_PCA, aes(morphology.PCA[,2],morphology.PCA[,3], color = seed_category, shape=seed_category))+
+  geom_point(size = 2, stroke = 1.125) +
+  stat_ellipse(segments = 102) +
+  scale_color_manual(values = colors) +
+  scale_shape_manual(values = shapes) +
+  labs(y="PC3", x= "PC2") +
+  theme_minimal()
+
+# just plots
+morphology_2 <- morphology  %>%
+  mutate(seed_category = ifelse(species == "berlandieri", color, species)) %>%  
+  mutate(seed_category = case_when(
+    seed_category == "lightred" ~ "red",
+    seed_category == "darkred"  ~ "red",
+    TRUE ~ seed_category
+  )) %>%
+  mutate(seed_category = factor(seed_category, levels = unique(seed_category[order(case_when(
+    seed_category == "album"         ~ 1,
+    seed_category == "black"         ~ 2,
+    seed_category == "red"           ~ 3,
+    seed_category == "nuttalliae"    ~ 4,
+    seed_category == "quinoa"        ~ 5,
+    seed_category == "macrocalycium" ~ 6
+  ))]))) %>%
+  # dplyr::select(-combined_epiderm_mean, -(year:adherant_pericarp), -(length:height), -perisperm_and_embryo_volume, -volume, -pericarp_mean, -inner_epiderm_mean) %>%
+  # dplyr::select(-combined_epiderm_mean, -perisperm_and_embryo_volume, -volume, -perisperm_volume, -fifty_weight, -year) %>%
+  # select_if( is_not_empty) %>%
+  # filter_all( all_vars(!is_numeric(.) | !is.na(.))) %>%
+  filter(seed_category != "album")
+#
+gg4<-morphology_2 %>%
+ggplot(aes(x = perisperm_and_embryo_volume, y = outer_epiderm_mean, shape=seed_category, color=seed_category)) +
+  geom_point(size = 2, stroke = 1.125)+
+  stat_ellipse(segments = 102) +
+  scale_color_manual(values = colors) +
+  scale_shape_manual(values = shapes) +
+  labs(x="seed interior volume (mm^3)", y= "outer epiderm thickness (µm)") +
+  theme_minimal()
+
+
+Z<-cbind(morphology$outer_epiderm_mean,morphology$inner_epiderm_mean,morphology$pericarp_mean,morphology$volume,morphology$embryo_volume,morphology$perisperm_volume,morphology$length,morphology$width,morphology$height)
+colnames(Z)<-c("outer_epiderm","inner_epiderm","pericarp","volume","embryo_volume","perisperm","length","width","height")
+pairs(Z, lower.panel=panel.smooth2,upper.panel=panel.cor,diag.panel=panel.hist)
+
+
+
+```
+
+
+```{r}
+height = 7.5
+width = 7.5
+
+#EVplot
+png(file="/Users/aperium/Dropbox/Projects/Chenopodium/Drafts/Thesis/figures/pca_α.png",w=width,h=height, res=300, units = "in")
+grid::grid.newpage()
+par(mfrow=c(1,2))
+n <- length(ev1)
+bsm <- data.frame(j=seq(1:n), p=0)
+bsm$p[1] <- 1/n
+for (i in 2:n) bsm$p[i] <- bsm$p[i-1] + (1/(n + 1 - i))
+bsm$p <- 100*bsm$p/n
+barplot(ev1, main="Eigenvalues", col="grey70", las=2)
+abline(h=mean(ev1), col="grey20", lty = "dashed")
+legend("topright", "Average eigenvalue", lwd=1, col="grey20", bty="n", lty = "dashed")
+barplot(t(cbind(100*ev1/sum(ev1), bsm$p[n:1])), beside=TRUE, main="% variation", col=c("grey70","grey20"), las=2)
+legend("topright", c("% eigenvalue", "Broken-stick model"),	pch=15, col=c("grey70","grey20"), bty="n")
+dev.off()
+
+
+#biplots
+png(file="/Users/aperium/Dropbox/Projects/Chenopodium/Drafts/Thesis/figures/pca_β.png",w=width*3,h=height, res=300, units = "in")
+grid::grid.newpage()
+par(mfrow=c(1,3))
+biplot(morphology.S, choices=c(1,2), scaling = 2, main="", display="species", col = "black", ylim = c(-2,2), xlim = c(-2,2))
+biplot(morphology.S, choices=c(1,3), scaling = 2, main="", display="species", col = "black", ylim = c(-2,2), xlim = c(-2,2))
+biplot(morphology.S, choices=c(2,3), scaling = 2, main="", display="species", col = "black", ylim = c(-2,2), xlim = c(-2,2))
+dev.off()
+
+
+#corrmatrix
+png(file="/Users/aperium/Dropbox/Projects/Chenopodium/Drafts/Thesis/figures/pca_γ.png",w=width,h=height, res=300, units = "in")
+grid::grid.newpage()
+par(mfrow=c(1,1))
+Z<-cbind(morphology$outer_epiderm_mean,morphology$inner_epiderm_mean,morphology$pericarp_mean,morphology$volume,morphology$embryo_volume,morphology$perisperm_volume,morphology$length,morphology$width,morphology$height)
+colnames(Z)<-c("outer_epiderm","inner_epiderm","pericarp","volume","embryo_volume","perisperm","length","width","height")
+pairs(Z, lower.panel=panel.smooth2,upper.panel=panel.cor,diag.panel=panel.hist)
+dev.off()
+
+# nonPCAplot
+png(file="/Users/aperium/Dropbox/Projects/Chenopodium/Drafts/Thesis/figures/pca_δ.png",w=width,h=height, res=300, units = "in")
+grid::grid.newpage()
+gg4
+dev.off()
+
+# PCAplot
+png(file="/Users/aperium/Dropbox/Projects/Chenopodium/Drafts/Thesis/figures/pca_ε.png",w=width*3,h=height, res=300, units = "in")
+grid::grid.newpage()
+# v1<-viewport(width = 1/3, height = 1, x = 1/6, y = 0.5)
+# v2<-viewport(width = 1/3, height = 1, x = 1/2, y = 0.5)
+# v3<-viewport(width = 1/3, height = 1, x = 5/6, y = 0.5)
+# print(gg1,vp=v1) 
+# print(gg2,vp=v2) 
+# print(gg3,vp=v3) 
+ggpubr::ggarrange(gg1,gg2,gg3, ncol = 3, common.legend = TRUE)
+dev.off()
+
+
+```
+
+
+
+
+```{r}
+manova(cbind(morphology$outer_epiderm_mean,morphology$volume) ~ morphology$seed_category) %>%
+  summary() #yay
+
+lm(formula = outer_epiderm_mean + volume ~ seed_category, data = morphology) %>% anova() #yay
+
+lm(formula = outer_epiderm_mean + embryo_volume + perisperm_volume ~ seed_category, data = morphology) %>% summary()
+aov(formula = outer_epiderm_mean + embryo_volume + perisperm_volume ~ seed_category, data = morphology) %>% TukeyHSD()
+
+lm(formula = outer_epiderm_mean + volume ~ seed_category, data = morphology) %>% summary()
+aov(formula = outer_epiderm_mean + volume ~ seed_category, data = morphology) %>% TukeyHSD()
+
+lm(formula = outer_epiderm_mean ~ seed_category, data = morphology) %>% summary()
+aov(formula = outer_epiderm_mean ~ seed_category, data = morphology) %>% TukeyHSD()
+
+lm(formula = volume ~ seed_category, data = morphology) %>% summary()
+aov(formula = volume ~ seed_category, data = morphology) %>% TukeyHSD()
+
+lm(formula = perisperm_and_embryo_volume ~ seed_category, data = morphology) %>% summary()
+aov(formula = perisperm_and_embryo_volume ~ seed_category, data = morphology) %>% TukeyHSD()
+
+lm(formula = perisperm_volume ~ seed_category, data = morphology) %>% summary()
+aov(formula = perisperm_volume ~ seed_category, data = morphology) %>% TukeyHSD()
+
+lm(formula = embryo_volume ~ seed_category, data = morphology) %>% summary()
+aov(formula = embryo_volume ~ seed_category, data = morphology) %>% TukeyHSD()
+
+morphology %>%
+  filter(seed_category == "red" | seed_category == "black") %>%
+t.test(formula = perisperm_and_embryo_volume ~ seed_category, data = .)
+
+morphology %>%
+  filter(seed_category == "red" | seed_category == "black") %>%
+t.test(formula = embryo_volume ~ seed_category, data = .)
+
+
+```
+
+
+```{r}
+
+morphology_3 <- morphology %>% 
+  mutate(black_red_domesticated = case_when(
+    seed_category == "album"         ~ "black",
+    seed_category == "black"         ~ "black",
+    seed_category == "lightred"      ~ "red",
+    seed_category == "darkred"       ~ "red",
+    seed_category == "red"           ~ "red",
+    seed_category == "nuttalliae"    ~ "dom",
+    seed_category == "quinoa"        ~ "dom",
+    seed_category == "macrocalycium" ~ "maybe"
+  )) %>%
+  filter(black_red_domesticated == "black" | black_red_domesticated == "dom")
+
+lm(formula = outer_epiderm_mean ~ black_red_domesticated, data = morphology_3) %>% summary.lm() %>% .$adj.r.squared
+lm(formula = inner_epiderm_mean ~ black_red_domesticated, data = morphology_3) %>% summary.lm() %>% .$adj.r.squared
+lm(formula = pericarp_mean ~ black_red_domesticated, data = morphology_3) %>% summary.lm() %>% .$adj.r.squared
+lm(formula = volume ~ black_red_domesticated, data = morphology_3) %>% summary.lm() %>% .$adj.r.squared
+lm(formula = embryo_volume ~ black_red_domesticated, data = morphology_3) %>% summary.lm() %>% .$adj.r.squared
+lm(formula = perisperm_volume ~ black_red_domesticated, data = morphology_3) %>% summary.lm() %>% .$adj.r.squared
+lm(formula = perisperm_and_embryo_volume ~ black_red_domesticated, data = morphology_3) %>% summary.lm() %>% .$adj.r.squared
+
+cov(morphology_3$volume,morphology_3$outer_epiderm_mean, use = "complete")
+cov(morphology_3$volume,morphology_3$embryo_volume, use = "complete")
+cov(morphology_3$volume,morphology_3$perisperm_volume, use = "complete")
+cov(morphology_3$volume,morphology_3$perisperm_and_embryo_volume, use = "complete")
+cov(morphology_3$perisperm_volume,morphology_3$embryo_volume, use = "complete")
+cov(morphology_3$perisperm_volume,morphology_3$outer_epiderm_mean, use = "complete")
+cov(morphology_3$embryo_volume,morphology_3$outer_epiderm_mean, use = "complete")
+```
+
+```{r}
+morphology_4 <- morphology %>% 
+  mutate(seed_cat_num = case_when(
+    seed_category == "album"         ~ 0,
+    seed_category == "black"         ~ 0,
+    seed_category == "lightred"      ~ 0.75,
+    seed_category == "darkred"       ~ 0.25,
+    seed_category == "red"           ~ 0.5,
+    seed_category == "nuttalliae"    ~ 1,
+    seed_category == "quinoa"        ~ 1,
+    seed_category == "macrocalycium" ~ 0.5
+  )) #%>% filter(seed_cat_num == 0 | seed_cat_num == 1)
+
+
+lm(formula = seed_cat_num ~ outer_epiderm_mean * pericarp_mean * inner_epiderm_mean + embryo_volume * perisperm_volume * volume, data = morphology_4) %>% 
+  summary()
+  #drop1()
+
+lm(formula = seed_cat_num ~ outer_epiderm_mean * pericarp_mean * inner_epiderm_mean + embryo_volume * perisperm_volume, data = morphology_4) %>% 
+  summary()
+
+```
+

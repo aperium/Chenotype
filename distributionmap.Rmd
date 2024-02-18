@@ -1,0 +1,87 @@
+---
+title: "Map of the Thesis Study Area and Harvest Locations"
+output: html_notebook
+---
+
+This is an attempt to make a map of the places I harvested and grew *C. berlandieri* vars. I'm using examples from [http://eriqande.github.io/](http://eriqande.github.io/rep-res-web/lectures/making-maps-with-R.html) to make the maps.
+
+```{r setup}
+#for maps
+library(ggplot2)
+library(ggmap)
+library(maps)
+library(mapdata)
+library(mapproj)
+
+library(dplyr)
+library(magrittr)
+
+library(raster)
+library(grid)
+library(gridExtra)
+```
+
+
+```{r}
+theme_bwmap <- function (base_size = 11, base_family = "") 
+{
+    theme_bw(base_size = base_size, base_family = base_family) %+replace% 
+        theme(panel.border = element_rect(fill = NA, colour = "black", size = 1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.key = element_blank(), axis.ticks = element_blank(), axis.text = element_blank(), axis.title = element_blank(), legend.position = "bottom", complete = TRUE)
+}
+
+proj = "gilbert"
+param = NULL
+# ori = c(mean(c(26,46.5)), mean(c(-100, -65)), 0)
+ori = c(90, mean(c(-100, -65)), 0)
+
+map_lim <- tibble(long = c(-100, -65), lat = c(26, 46.5)) %>%
+  mutate(long = mapproject(long, lat, proj, param, ori)$x, lat = mapproject(long, lat, proj, param, ori)$y)
+
+#get state outlines
+states <- map_data("state") %>%
+  mutate(long = mapproject(long, lat, proj, param, ori)$x, lat = mapproject(long, lat, proj, param, ori)$y)
+
+#get national outlines
+world <- map_data("world") %>%
+  subset(region == "USA" | region == "Canada" | region == "Mexico") %>%
+  mutate(long = mapproject(long, lat, proj, param, ori)$x, lat = mapproject(long, lat, proj, param, ori)$y)
+
+# get Great Lakes
+lakes <- map_data("lakes") %>%
+  subset(region == "Great Lakes") %>%
+  mutate(long = mapproject(long, lat, proj, param, ori)$x, lat = mapproject(long, lat, proj, param, ori)$y)
+
+ena_map <- ggplot() + 
+  geom_polygon(data = world, aes(x=long, y = lat, group = group), fill = NA, color = "black") +
+  geom_polygon(data = states, aes(x=long, y = lat, group = group), fill = "white", color = "black", size = 0.4) +
+  geom_polygon(data = lakes, aes(x=long, y = lat, group = group), fill = "white", color = "black") +
+  coord_fixed(xlim = map_lim$long,  ylim = map_lim$lat, ratio = 1.0) +
+  # scale_color_gradient(low = munsell::mnsl("5R 3/8"), high = munsell::mnsl("2.5Y 6/8"), space = "Lab")
+  theme_bwmap()
+ena_map
+
+
+# ggmapdata <- get_map(location = c(-80, 38), maptype = "terrain", source = "google", zoom = 5, color = "bw")
+# ggmap(ggmapdata)
+```
+
+```{R}
+
+bushianum <- tibble(y = c(39,19,19,39), x = c(-82,-82,-72,-72)) %>%
+  mutate(x = mapproject(x, y, proj, param, ori)$x, y = mapproject(x, y, proj, param, ori)$y)
+
+dist_map <- ena_map +
+  geom_polygon(data = bushianum, aes(x=x, y=y), fill = "blue", alpha = 0.5)
+dist_map
+
+```
+
+
+
+```{r}
+png(file="figures/distributionarea.png",w=1800,h=1800, res=300, bg = "transparent")
+grid.newpage()
+v1<-viewport(width = 1, height = 1, x = 0.5, y = 0.5) #plot area for the main map
+print(ena_map,vp=v1)
+dev.off()
+```

@@ -1,0 +1,47 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r setup}
+library(tidyverse)
+library(magrittr)
+library(ggplot2)
+
+library(nlme)
+library(mgcv)
+```
+
+```{r}
+
+six <- tibble::tibble(treatments = c(1:6), weeks = c(0, 1, 2, 4, 8, 12)) %>% mutate(days = weeks * 7, index = treatments/6)
+four <- tibble::tibble(treatments = c(1:4), days = c(0, 10, 36, 90)) %>% mutate(weeks = round(days / 7, 0), index = treatments/4)
+
+
+ggplot() +
+  geom_line(aes(y = days, x = index), data = four, color = "blue") +
+  geom_line(aes(y = days, x = index), data = six, color = "purple") +
+  theme_classic()
+
+ 
+eight <- tibble::tibble(treatments = c(1:8)) %>% mutate(index = treatments/8)
+eight %<>% mutate(days = spline(four$index, four$days, n = 8)$y)
+eight %<>% mutate(weeks = round(days/7,0), days = round(days,0))
+
+eight2 <- tibble::tibble(treatments = c(1:8)) %>% mutate(index = treatments/7)
+eight2 %<>% mutate(weeks = c(0, 1, 2, 4, 6, 9, 12, 16))
+eight2 %<>% mutate(days = weeks *7, days2 = round(spline(spline(eight2$index,eight2$weeks*7, n = 3),n= 8)$y,0))
+
+ggplot() +
+  geom_line(aes(y = weeks, x = index), data = four, color = "blue") +
+  geom_line(aes(y = weeks, x = index), data = six, color = "purple") +
+  geom_line(aes(y = weeks, x = index), data = eight, color = "red") +
+  geom_line(aes(y = weeks, x = index), data = eight2[1:6,], color = "green") +
+  geom_line(aes(y = weeks, x = index), data = eight2[6:8,], color = "darkgreen") +
+  # geom_line(aes(y = days2, x = index), data = eight2, color = "darkgreen") +
+  theme_classic()
+
+
+
+```
+

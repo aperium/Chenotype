@@ -1,0 +1,182 @@
+---
+title: "Chenopodium Morph Counts"
+author: "Daniel R Williams"
+date: "1/13/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+# Configuring the workspace and loading packages.
+# Edited: 10/13/2017
+
+library(knitr)
+knitr::opts_chunk$set(echo=FALSE, message = FALSE, warning = FALSE, results = 'markdown', tidy=TRUE, fig.asp=0.618, out.width="70%", fig.align="center")
+library(ggplot2)
+library(hrbrthemes)
+
+# For handeling colors
+#library(colorspace)
+#library(munsell)
+
+# For image processing
+# Also should look into OpenCV (access through Rccp, python, or Java) and ROpenCV.
+#library(imager) # https://cran.r-project.org/web/packages/imager/vignettes/gettingstarted.html
+#library("EBImage") # https://www.bioconductor.org/packages/devel/bioc/vignettes/EBImage/inst/doc/EBImage-introduction.html
+
+# For data manipulation
+library(magrittr)
+library(tidyverse)
+```
+
+## 1. 
+
+```{r, cache = FALSE, results = 'markdown'}
+samples <- read_csv("/users/aperium/Dropbox/Projects/Chenopodium/Data/Morphcounts/morphcounts.csv")
+
+# removing old data
+samples %<>% filter(is.na(subpopulation) | (subpopulation != "apical" & subpopulation != "latteral")) %>%
+  filter(is.na(parental_population) | parental_population == "wild" | parental_population == "cultivated")
+
+# grouping rows based on population
+samples %<>% group_by(population) %>% 
+  summarise_at(vars(light_red,dark_red,black),funs(sum))
+
+
+samples %<>% ungroup() %<>% mutate(
+                red = light_red + dark_red,
+                total = light_red + dark_red + black,
+                red_proportion = red / total,
+                black_proportion = black / total,
+                light_red_proportion = light_red / total,
+                dark_red_proportion = dark_red / total
+                )
+
+# calculating new variables based on existing ones
+# parental_samples <- filter(samples,parental_population=="wild" | parental_population=="cultivated")
+#parental_samples <- select(parental_samples,-parental_population)
+
+# parental_samples <- filter(samples, is.na(subpopulation) | subpopulation != "<1mm")
+parental_samples <- arrange(samples,red_proportion) %>% ungroup()
+
+summary(parental_samples$red_proportion)
+sd(parental_samples$red_proportion)
+
+```
+
+```{r, cache = FALSE, results = 'markdown'}
+
+
+# boxplot(red_proportion ~ population, data = parental_samples)
+# barplot(parental_samples$red_proportion, names.arg = parental_samples$population)
+
+# ggplot(data = NULL) +
+#   geom_col(
+#     mapping = aes(),
+#     position = "dodge",
+#     data = select(parental_samples, population, red, black)
+#   )
+
+# parental_samples_tidy <- gather(parental_samples,key="morph",value="proportion",red_proportion,black_proportion) %>% select(population, morph, proportion) %>% group_by(population) %>% arrange(population, proportion)
+# 
+# parental_samples_tidy <- gather(parental_samples,key="morph",value="proportion",red_proportion,black_proportion) %>% select(population, morph, proportion) %>% group_by( morph ) %>% arrange(proportion, .by_group = TRUE) %>% group_by( population )
+
+# ggplot(data = NULL) +
+#   geom_col(
+#     mapping = aes(),
+#     position = "dodge",
+#     data = select(proportion~population,parental_samples_tidy)
+#   )
+
+# ggplot(parental_samples_tidy,aes(x=population,y=proportion,colour=morph))+
+#   geom_col(
+#     mapping = aes(),
+#     position = "dodge",
+#     data = parental_samples_tidy
+#   )+
+#   ylab("Proportion")+
+#   xlab("Wild Populations")+
+#   # scale_color_manual(values=c("darkorange","darkblue"))+
+#   # labs(fill="Morph")+ 
+#   # theme_bw()+
+#   theme_ipsum_rc() + 
+#   theme(legend.position = "bottom", axis.text.x=element_text(angle=90, hjust=0))
+# 
+# ggplot(parental_samples_tidy,aes(x=population,y=proportion,fill=factor(morph)))+
+#   geom_bar(stat="identity",position="dodge")+
+#   scale_fill_discrete(name="morph",
+#                       breaks=c(1, 2),
+#                       labels=c("red", "black"))+
+#   xlab("Parent Plant")+ylab("Proportion")+
+#   theme_ipsum_rc() + 
+#   theme(legend.position = "bottom", axis.text.x=element_text(angle=90, hjust=0))
+
+# ggplot(parental_samples_tidy,aes(x=reorder(  ),y=proportion,fill=factor(morph)))+
+#   geom_bar(stat="identity",position="dodge")+
+#   scale_fill_discrete(name="morph",
+#                       breaks=c(1, 2),
+#                       labels=c("red", "black"))+
+#   xlab("Parent Plant")+ylab("Proportion")+
+#   theme_ipsum_rc() + 
+#   theme(legend.position = "bottom", axis.text.x=element_text(angle=90, hjust=0))
+
+# parental_samples_tidy <- gather(parental_samples,key="morph",value="proportion",red_proportion,black_proportion) %>% 
+#   select(population, morph, proportion) %>%
+#   mutate(order = proportion + as.double(morph=="black_proportion")) %>% 
+#   arrange(order)
+# 
+# parental_samples_tidy <- gather(parental_samples,key="morph",value="proportion",red_proportion,black_proportion) %>% 
+#   select(population, morph, proportion) %>%
+#   mutate(population = factor(population, levels = population[order(proportion + as.double(morph=="black_proportion"))]))
+# 
+# parental_samples_tidy <- gather(parental_samples,key="morph",value="proportion",red_proportion,black_proportion) %>% 
+#   select(population, morph, proportion) %>%
+#   mutate(population = factor(population, levels = sort(unique(if(morph=="black_proportion"){1-proportion}else{proportion})), ordered=TRUE))
+
+# parental_samples_tidy <- gather(parental_samples,key="morph",value="proportion",red_proportion,black_proportion) %>% 
+#   select(population, morph, proportion) %>%
+#   mutate(population = factor(population, levels = unique(population[order(as.double(morph=="red_proportion")-proportion)])))
+
+parental_samples_tidy <- mutate(parental_samples, black_proportion_2 = black_proportion) %>%
+  gather(key="morph",value="proportion",red_proportion,black_proportion) %>%
+  gather(key = "morph2", value = "proportion2", light_red_proportion, dark_red_proportion, black_proportion_2) %>%
+  # select(population, morph, proportion) %>%
+  mutate(population = factor(population, levels = unique(population[order(as.double(morph=="red_proportion")-proportion)])))
+
+# samples_tidy <- mutate(samples, black_proportion_2 = black_proportion) %>%
+#   gather(key="morph",value="proportion",red_proportion,black_proportion) %>% 
+#   gather(key = "morph2", value = "proportion2", light_red_proportion, dark_red_proportion, black_proportion_2) %>%
+#   # select(population, morph, proportion) %>%
+#   mutate(population = factor(population, levels = unique(population[order(as.double(morph=="red_proportion")-proportion)])))
+
+# ggplot(parental_samples_tidy,aes(x=population,y=proportion,fill=morph)) +
+#   geom_col(position="fill") +
+#   scale_fill_manual(values=c("grey50","orange"), labels = c("darkmorph", "redmorph"), name = "morph type") +
+#   xlab("Parent Plant")+ylab("Proportion" )+
+#   # theme_ipsum_rc() + 
+#   theme_minimal() +
+#   theme(legend.position = "right", axis.text.x=element_text(angle=90, hjust=0))
+
+
+# TODO
+# Add error bars for the sd of image samples
+# Move the "total" seed count above the bars
+# In each bar, label the proportion.
+
+ggplot(parental_samples_tidy,aes(x=population,y=proportion,fill=morph)) +
+  # geom_col(position="dodge") +
+  geom_col(position="fill") +
+  geom_text(aes(x=population,y=0.96,label = total), color = "white") +
+  scale_fill_manual(values=c("grey45","firebrick"), labels = c("darkmorph", "redmorph"), name = "morph type") +
+  xlab("parent plant")+ylab("proportion" )+
+  theme_ipsum_rc(grid = FALSE, base_size = 11.5 * 1.5, axis_title_size = 11.5 * 2, axis_title_face = "bold", axis_title_just = "mc") +
+  theme(legend.position = "right", axis.text.x=element_text(angle=90, hjust=1, vjust=0.5), legend.text = element_text(size = 10 * 1.5, hjust=1, vjust=0.5), legend.title=element_text(face = "bold",size = 11.5 * (10 / 11.5) * 2))
+
+ggplot(parental_samples_tidy,aes(x=population,y=proportion2,fill=morph2)) +
+  # geom_col(position="dodge") +
+  geom_col(position="fill") +
+  geom_text(aes(x=population,y=0.96,label = total), color = "white") +
+  scale_fill_manual(values=c("grey45","firebrick","gold"), labels = c("black", "dark red", "light red"), name = "morph type") +
+  xlab("parent plant")+ylab("proportion" )+
+  theme_ipsum_rc(grid = FALSE, base_size = 11.5 * 1.5, axis_title_size = 11.5 * 2, axis_title_face = "bold", axis_title_just = "mc") +
+  theme(legend.position = "right", axis.text.x=element_text(angle=90, hjust=1, vjust=0.5), legend.text = element_text(size = 10 * 1.5, hjust=1, vjust=0.5), legend.title=element_text(face = "bold",size = 11.5 * (10 / 11.5) * 2))
+```

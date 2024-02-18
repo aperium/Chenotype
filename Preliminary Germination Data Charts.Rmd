@@ -1,0 +1,50 @@
+---
+title: "Preliminary Germination Data Charts"
+author: "Daniel R Williams; Paul E Patton"
+date: "2/10/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+# Experimental Procedure One: Planting Trays
+
+```{r one}
+
+```
+
+# Experimental Procedure Two: Petri Dishes
+
+```{r two}
+two.data <- read.csv("Petri-dishes - Effects of Stratification on Germination Rates in Chenopdoium spp/Stratification Germination rates in Chenopdoium in Petri-dishes prelim simplified 10feb2017.csv", header = TRUE)
+two.days <- two.data$hours/24
+two.data.combined <- data.frame(days = two.days,
+                                Cq0 = two.data$Cq.0w.0r + two.data$Cq.0w.10r,
+                                Cq1 = two.data$Cq.1w.0r + two.data$Cq.1w.10r,
+                                Cq2 = two.data$Cq.2w.0r + two.data$Cq.2w.10r,
+                                Cbb0 = two.data$Cbb.0w.0r + two.data$Cbb.0w.10r,
+                                Cbb1 = two.data$Cbb.1w.0r + two.data$Cbb.1w.10r,
+                                Cbb2 = two.data$Cbb.2w.0r + two.data$Cbb.2w.10r,
+                                Cb0 = two.data$Cb.0w.0r + two.data$Cb.0w.10r,
+                                Cb1 = two.data$Cb.1w.0r + two.data$Cb.1w.10r,
+                                Cb2 = two.data$Cb.2w.0r + two.data$Cb.2w.10r,
+                                Ca0 = two.data$Ca.0w.0r + two.data$Ca.0w.10r,
+                                Ca1 = two.data$Ca.1w.0r + two.data$Ca.1w.10r,
+                                Ca2 = two.data$Ca.2w.0r + two.data$Ca.2w.10r,
+                                Cg0 = two.data$Cg.0w.0r + two.data$Cg.0w.10r,
+                                Cg1 = two.data$Cg.1w.0r + two.data$Cg.1w.10r,
+                                Cg2 = two.data$Cg.2w.0r + two.data$Cg.2w.10r,
+                                row.names = 1)
+str(two.data.combined)
+plot(two.data.combined, type = "l")
+#ggplot(data = data.frame(two.table), mapping = aes(x = 41, y = 50)) + geom_line()
+```
+
+# Experimental Procedure Three: Freezing Survival
+
+```{r three}
+
+```
+

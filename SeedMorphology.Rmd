@@ -1,0 +1,240 @@
+---
+title: "Chenopodium Seed Morphology"
+author: "Daniel R Williams"
+date: "10/13/2017"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+# Configuring the workspace and loading packages.
+# Edited: 10/13/2017
+
+library(knitr)
+knitr::opts_chunk$set(echo=FALSE, message = FALSE, warning = FALSE, results = 'markdown', tidy=TRUE, fig.asp=0.618, out.width="70%", fig.align="center")
+library(ggplot2)
+library(hrbrthemes)
+
+# For handeling colors
+#library(colorspace)
+#library(munsell)
+
+# For image processing
+# Also should look into OpenCV (access through Rccp, python, or Java) and ROpenCV.
+#library(imager) # https://cran.r-project.org/web/packages/imager/vignettes/gettingstarted.html
+#library("EBImage") # https://www.bioconductor.org/packages/devel/bioc/vignettes/EBImage/inst/doc/EBImage-introduction.html
+
+# For data manipulation
+library(tidyverse)
+library(magrittr)
+```
+
+## 1. 
+
+```{r, eval=TRUE, cache = FALSE, results = 'markdown'}
+seeds <- read_csv("/users/aperium/Dropbox/Projects/Chenopodium/Data/Bisected seeds/bisectedseeds.csv") %>% filter(!is.na(population))
+#glimpse(seeds)
+
+# variable_descriptions <- read_csv("/users/aperium/Dropbox/Projects/Chenopodium/Data/Bisected seeds/variabledescriptions.csv", na = c("")) %>% extract(1:28,) %>% glimpse()
+# 
+# d <- variable_descriptions$descriptions
+
+# knitr::kable(
+#   data.frame(Variables=names(seeds), Description=d),
+#   digits = 3,
+#   format = "markdown",
+#   padding = 1,
+#   caption = "Variables and variable discriptions of the seed morphology data."
+# )
+
+```
+
+```{r, cache = FALSE, results = 'markdown'}
+# calculating new variables based on existing ones
+ 
+seeds2 <- mutate(seeds, binary_color_bin = if_else(color_bin == "black","black","red"))
+
+# calculating the means of the pericarp and outer and inner epiderms
+# seeds2 %<>% mutate(
+#   combined_epiderm_mean = rowMeans(.[grep("epiderm", names(.))], na.rm = TRUE),
+#   outer_epiderm_mean = rowSums(.[grep("outer_epiderm", names(.))]/4, na.rm = TRUE),
+#   inner_epiderm_mean = rowSums(.[grep("inner_epiderm", names(.))]/4, na.rm = TRUE)
+#   # pericarp_mean = rowSums(.[grep("pericarp", names(.))]/4, na.rm = FALSE)
+#   ) 
+
+seeds2 %<>% mutate(
+  outer_epiderm_mean = rowMeans(.[grep("outer_epiderm", names(.))], na.rm = TRUE),
+  inner_epiderm_mean = rowMeans(.[grep("inner_epiderm", names(.))], na.rm = TRUE)
+  # pericarp_mean = rowSums(.[grep("pericarp", names(.))]/4, na.rm = FALSE)
+  ) %<>% mutate(
+  combined_epiderm_mean = rowSums(.[grep("epiderm_mean", names(.))], na.rm = TRUE)
+  ) %<>% mutate(
+    outer_epiderm_mean = ifelse(outer_epiderm_mean != 0, outer_epiderm_mean, NA),
+    inner_epiderm_mean = ifelse(inner_epiderm_mean != 0, inner_epiderm_mean, NA),
+    combined_epiderm_mean = ifelse(combined_epiderm_mean != 0, combined_epiderm_mean, NA)
+  )
+                                               
+# seed volume in cubic mm
+seeds2 %<>% mutate(volume = 4.0 * 3.141592553589 * length * width * height * 1000.0^-3)
+
+# seeds2 <- mutate(seeds2, volume_without_testa = 4 * 3.141592553589 * (length - 2*testa_mean) * (width - 2*testa_mean) * (height- 2*testa_mean) / 1000^3)
+
+seeds2 %<>% mutate( 
+                log_combined_epiderm_mean = log(combined_epiderm_mean),
+                log_volume = log(volume)
+                )
+
+# knitr::kable(
+#   select(seeds2,population, year, color_bin, volume, combined_epiderm_mean, fifty_weight),
+#   digits = 4,
+#   format = "markdown",
+#   padding = 1,
+#   caption = "Selected seed morphology data."
+# )
+
+```
+
+```{r, cache = FALSE, results = 'markdown'}
+# Boxplot of testa thickness compared to colorbin
+
+
+## Demoing on lightred and darkred until I get more data.
+darkred <- filter(seeds2,color_bin=="darkred", species=="berlandieri")
+lightred <- filter(seeds2,color_bin=="lightred", species=="berlandieri")
+red <- filter(seeds2, binary_color_bin=="red", species=="berlandieri")
+black <- filter(seeds2, color_bin=="black", species=="berlandieri")
+nuttalliae <- filter(seeds2, species=="nuttalliae")
+
+# par(mfrow=c(1,3))
+# boxplot(nuttalliae$testa_mean, lightred$testa_mean, darkred$testa_mean, red$testa_mean, black$testa_mean, names = c("nuttalliae","lightred","darkred","red","black"), boxwex = 0.25, ylab  = "Seed coat thickness (µm)", xlab = "Types of seeds")
+# 
+# boxplot(nuttalliae$volume, lightred$volume, darkred$volume, red$volume, black$volume, names = c("nuttalliae","lightred","darkred","red","black"), boxwex = 0.25, ylab  = "Seed volume (mm^3)", xlab = "Types of seeds")
+# 
+# boxplot(nuttalliae$volume_without_testa, lightred$volume_without_testa, darkred$volume_without_testa, red$volume_without_testa, black$volume_without_testa, names = c("nuttalliae","lightred","darkred","red","black"), boxwex = 0.25, ylab  = "Seed volume without seed coat (mm^3)", xlab = "Types of seeds")
+# 
+# boxplot(nuttalliae$log_testa_mean, lightred$log_testa_mean, darkred$log_testa_mean, red$log_testa_mean, black$log_testa_mean, names = c("nuttalliae","lightred","darkred","red","black"), boxwex = 0.25, ylab  = "log Seed coat thickness (µm)", xlab = "Types of seeds")
+# 
+# boxplot(nuttalliae$log_volume, lightred$log_volume, darkred$log_volume, red$log_volume, black$log_volume, names = c("nuttalliae","lightred","darkred","red","black"), boxwex = 0.25, ylab  = "log Seed volume (mm^3)", xlab = "Types of seeds")
+# 
+# boxplot(nuttalliae$log_volume_without_testa, lightred$log_volume_without_testa, darkred$log_volume_without_testa, red$log_volume_without_testa, black$log_volume_without_testa, names = c("nuttalliae","lightred","darkred","red","black"), boxwex = 0.25, ylab  = "log Seed volume (mm^3)", xlab = "Types of seeds")
+
+par(mfrow=c(1,2))
+boxplot(nuttalliae$log_combined_epiderm_mean, red$log_combined_epiderm_mean, black$log_combined_epiderm_mean, names = c("nuttalliae","red","black"), boxwex = 0.25, ylab  = "log Seed coat thickness (µm)", xlab = "Types of seeds")
+boxplot(nuttalliae$log_volume, red$log_volume, black$log_volume, names = c("nuttalliae","red","black"), boxwex = 0.25, ylab  = "log Seed volume (mm^3)", xlab = "Types of seeds")
+
+par(mfrow=c(1,1))
+boxplot(nuttalliae$combined_epiderm_mean, red$combined_epiderm_mean, black$combined_epiderm_mean, names = c("nuttalliae","red","black"), boxwex = 0.25, ylab  = "log Seed coat thickness (µm)", xlab = "Types of seeds")
+
+par(mfrow=c(1,1))
+boxplot(nuttalliae$combined_epiderm_mean, lightred$combined_epiderm_mean, black$combined_epiderm_mean, names = c("nuttalliae","lightred","black"), boxwex = 0.25, ylab  = "log Seed coat thickness (µm)", xlab = "Types of seeds")
+
+
+## Demoing on lightred and darkred until I get more data.
+darkred <- filter(seeds2,color_bin=="darkred", species=="berlandieri")
+lightred <- filter(seeds2,color_bin=="lightred", species=="berlandieri")
+red <- filter(seeds2, binary_color_bin=="red", species=="berlandieri")
+black <- filter(seeds2, color_bin=="black", species=="berlandieri")
+nuttalliae <- filter(seeds2, species=="nuttalliae")
+
+# data2_tidy <- gather(data2, key="morph",value="proportion",red_proportion,black_proportion) %>%
+#   select(population, morph, proportion) %>%
+#   mutate(population = factor(population, levels = unique(population[order(as.double(morph=="red_proportion")-proportion)])))
+
+# seeds2 %<>% mutate(seed_category = ifelse(species == "berlandieri", binary_color_bin, species)) %>%  mutate(seed_category = factor(seed_category, levels = unique(seed_category[order(ifelse(seed_category == "nuttalliae", 1, ifelse(seed_category == "red", 2, 3)))])))
+
+seeds3 <- seeds2 %>% 
+  mutate(seed_category = ifelse(species == "berlandieri", ifelse(population == "Athens0001", population, binary_color_bin), species)) %>%  
+  mutate(seed_category = factor(seed_category, levels = unique(seed_category[order(case_when(
+    seed_category == "quinoa"     ~ 1,
+    seed_category == "nuttalliae" ~ 2,
+    seed_category == "red"        ~ 3,
+    seed_category == "black"      ~ 4,
+    seed_category == "Athens0001" ~ 5
+  ))]))) %>%
+  filter(maturity == "mature")
+
+# ggplot(parental_samples_tidy,aes(x=population,y=proportion,fill=morph)) +
+#   # geom_col(position="dodge") +
+#   geom_col(position="fill") +
+#   scale_fill_manual(values=c("grey50","orange"), labels = c("darkmorph", "redmorph"), name = "morph type") +
+#   xlab("parent plant")+ylab("proportion" )+
+#   theme_ipsum_rc(grid = FALSE, base_size = 11.5 * 1.5, axis_title_size = 11.5 * 2, axis_title_face = "bold", axis_title_just = "mc") +
+#   theme(legend.position = "right", axis.text.x=element_text(angle=90, hjust=1, vjust=0.5), legend.text = element_text(size = 10 * 1.5, hjust=1, vjust=0.5), legend.title=element_text(face = "bold",size = 11.5 * (10 / 11.5) * 2))
+
+#linear scale on volume with infertile seeds removed
+seeds4 <- seeds2 %>% 
+  mutate(seed_category = ifelse(species == "berlandieri", ifelse(population == "Athens0001", population, ifelse(maturity == "immature", maturity, binary_color_bin)), species)) %>%  
+  mutate(seed_category = factor(seed_category, levels = unique(seed_category[order(case_when(
+    seed_category == "quinoa"     ~ 1,
+    seed_category == "nuttalliae" ~ 2,
+    seed_category == "immature"   ~ 3,
+    seed_category == "red"        ~ 4,
+    seed_category == "black"      ~ 5,
+    seed_category == "Athens0001" ~ 6
+  ))])))
+
+fill_color <- "orange"
+line_color <- "grey30"
+
+# log scale
+ggplot(seeds4, aes(x = seed_category, y = combined_epiderm_mean)) +
+  stat_boxplot(coef = 1.5, size = 1.5, outlier.shape = 1, outlier.size = 1.5, outlier.stroke = 2, outlier.color = line_color, outlier.fill = fill_color, fill = fill_color, colour = line_color, geom ='errorbar', width = .75/2) +
+  geom_boxplot(size = 1.5, outlier.shape = 1, outlier.size = 1.5, outlier.stroke = 2, outlier.color = line_color, outlier.fill = fill_color, fill = fill_color, colour = line_color, width = 0.75) +
+  xlab("type of seed") + ylab("thickness of seed epiderm (µm)") +
+  theme_ipsum_rc(grid = FALSE, base_size = 11.5 * 4, axis_title_size = 11.5 * 5, axis_title_face = "bold", axis_title_just = "mc") +
+  # theme(axis.text.x=element_text(angle=0, hjust=0.5, vjust=1, size = 11.5 * 1.5)) +
+  coord_trans(y = scales::log_trans()) +
+  scale_y_continuous(limits = c(2,50), breaks = c(2*1:5,10*2:5)) +
+  scale_x_discrete(expand = c(0.05, 0.05))
+
+#linear scale
+ggplot(seeds3, aes(x = seed_category, y = combined_epiderm_mean)) +
+  stat_boxplot(coef = 1.5, size = 1.5, outlier.shape = 1, outlier.size = 1.5, outlier.stroke = 2, outlier.color = line_color, outlier.fill = fill_color, fill = fill_color, colour = line_color, geom ='errorbar', width = .75/2) +
+  geom_boxplot(size = 1.5, outlier.shape = 1, outlier.size = 1.5, outlier.stroke = 2, outlier.color = line_color, outlier.fill = fill_color, fill = fill_color, colour = line_color, width = 0.75) +
+  xlab("type of seed") + ylab("thickness of seed epiderm (µm)") +
+  theme_ipsum_rc(grid = FALSE, base_size = 11.5 * 4, axis_title_size = 11.5 * 5, axis_title_face = "bold", axis_title_just = "mc") +
+  # theme(axis.text.x=element_text(angle=0, hjust=0.5, vjust=1, size = 11.5 * 1.5)) +
+  # coord_trans(y = scales::log_trans()) +
+  scale_y_continuous(limits = c(0,50), breaks = c(0,10*1:5)) +
+  scale_x_discrete(expand = c(0.05, 0.05))
+
+ggplot(seeds3, aes(x = seed_category, y = volume)) +
+  stat_boxplot(coef = 1.5, size = 1.5, outlier.shape = 1, outlier.size = 1.5, outlier.stroke = 2, outlier.color = line_color, outlier.fill = fill_color, fill = fill_color, colour = line_color, geom ='errorbar', width = .75/2) +
+  geom_boxplot(size = 1.5, outlier.shape = 1, outlier.size = 1.5, outlier.stroke = 2, outlier.color = line_color, outlier.fill = fill_color, fill = fill_color, colour = line_color, width = 0.75) +
+  xlab("type of seed") + ylab("seed volume") +
+  theme_ipsum_rc(grid = FALSE, base_size = 11.5 * 4, axis_title_size = 11.5 * 5, axis_title_face = "bold", axis_title_just = "mc") +
+  # theme(axis.text.x=element_text(angle=0, hjust=0.5, vjust=1, size = 11.5 * 1.5)) +
+  # coord_trans(y = scales::log_trans()) +
+  scale_y_continuous(limits = c(0,100), breaks = c(0,25*1:4)) +
+  scale_x_discrete(expand = c(0.05, 0.05))
+
+
+```
+
+```{r, eval= FALSE, cache = FALSE, results = 'markdown'}
+# two-sample t-test comparing testa thicknesses between color bins blak and red.
+
+## Demoing on lightred and darkred until I get more data. Skipping assumptions testing...
+## Well looky there, there is a difference!
+t.test(red$testa_mean, black$testa_mean, var.equal = FALSE)
+
+t.test(red$volume, black$volume, var.equal = FALSE)
+t.test(red$volume_without_testa, black$volume_without_testa, var.equal = FALSE)
+
+```
+
+```{r, eval=FALSE, cache = FALSE, results = 'markdown'}
+# R^2 statistic from a linear model to calculate degree of variation in seed coat thickness that can be explained by seed color.
+
+# Adjusted R^2 = 0.7018 ... so about 70% of the testa thickness can be explained by black vs red color.
+par(mfrow=c(2,2))
+plot(lm(data = seeds, testa_mean ~ volume))
+summary(lm(data = seeds, testa_mean ~ binary_color_bin))
+
+plot(data = seeds, fifty_weight ~ volume)
+
+```
+
+
+

@@ -1,0 +1,1572 @@
+---
+title: "SoE Madison Figures and Statistics"
+output: html_notebook
+---
+
+```{r setup}
+#load libraries
+library(tidyverse)
+library(magrittr)
+library(ggplot2)
+
+library(ade4)
+library(vegan)
+library(gclus)
+library(ape)
+
+# special libararies only availible in source form
+source("/Users/aperium/Dropbox/Projects/MSES/CLasses/Bios 8700 - Biostats II/WorkingDirectory/bookscripts/evplot2.R")
+source("/Users/aperium/Dropbox/Projects/MSES/CLasses/Bios 8700 - Biostats II/WorkingDirectory/multiplot.R")
+source("/Users/aperium/Dropbox/Projects/MSES/CLasses/Bios 8700 - Biostats II/WorkingDirectory/evmultiplot.R")
+
+source("/users/aperium/Dropbox/Projects/MSES/CLasses/Bios 8700 - Biostats II/WorkingDirectory/bookscripts/HighstatLibV10.R")
+
+library(knitr)
+#fig.asp=0.618
+knitr::opts_chunk$set(
+	echo = FALSE,
+	fig.asp = 0.618,
+	message = FALSE,
+	warning = FALSE,
+	results = "asis",
+	tidy = TRUE,
+	cache = FALSE
+)
+library(hrbrthemes)
+
+
+```
+
+```{r}
+
+outline_color <- "grey25"
+
+fill_color <- c(nuttalliae = "goldenrod1",
+                red = "firebrick1",
+                black = "grey55",
+                quinoa = "lemonchiffon",
+                album = "grey33",
+                macrocalycium = "firebrick")
+
+fill_color2 <- c(nuttalliae = "#F3B35A", 
+                red = "#540610", 
+                black = "#4B4144", 
+                quinoa = "#EBDE78", 
+                album = "grey33",
+                macrocalycium = "#492A26")
+
+fill_color3 <- c(nuttalliae = rgb(colorRamp(c(fill_color[1], fill_color2[1]))(seq(0, 1, length = 3)), max = 255)[2], 
+                red = rgb(colorRamp(c(fill_color[2], fill_color2[2]))(seq(0, 1, length = 5)), max = 255)[2], 
+                black = rgb(colorRamp(c(fill_color[3], fill_color2[3]))(seq(0, 1, length = 3)), max = 255)[2], 
+                quinoa = rgb(colorRamp(c(fill_color[4], fill_color2[4]))(seq(0, 1, length = 5)), max = 255)[4], 
+                album = rgb(colorRamp(c(fill_color[5], fill_color2[5]))(seq(0, 1, length = 3)), max = 255)[2],
+                macrocalycium = rgb(colorRamp(c(fill_color[6], fill_color2[6]))(seq(0, 1, length = 3)), max = 255)[2])
+
+# line_color <- c(nuttalliae = "goldenrod1", 
+#                 red = "firebrick1", 
+#                 black = rgb(colorRamp(c(fill_color["black"], outline_color))(seq(0, 1, length = 3)), max = 255)[2], 
+#                 quinoa = "lemonchiffon", 
+#                 album = "grey33",
+#                 macrocalycium = "firebrick")
+
+line_color <- c(nuttalliae = fill_color3[[1]], 
+                red = fill_color3[[2]], 
+                black = fill_color3[[3]], 
+                quinoa = rgb(colorRamp(c(fill_color3[[4]], "#000000"))(seq(0, 1, length = 7)), max = 255)[2], 
+                album = fill_color3[[5]],
+                macrocalycium = fill_color3[[6]])
+
+fill_color4 <- c(nuttalliae = rgb(colorRamp(c(fill_color3[1], "#FFFFFF"))(seq(0, 1, length = 3)), max = 255)[2], 
+                red = rgb(colorRamp(c(fill_color3[2], "#FFFFFF"))(seq(0, 1, length = 3)), max = 255)[2], 
+                black = rgb(colorRamp(c(fill_color3[3], "#FFFFFF"))(seq(0, 1, length = 3)), max = 255)[2], 
+                quinoa = rgb(colorRamp(c(fill_color3[4], "#FFFFFF"))(seq(0, 1, length = 3)), max = 255)[2], 
+                album = rgb(colorRamp(c(fill_color3[5], "#FFFFFF"))(seq(0, 1, length = 3)), max = 255)[2],
+                macrocalycium = rgb(colorRamp(c(fill_color3[6], "#FFFFFF"))(seq(0, 1, length = 3)), max = 255)[2])
+
+theme_Maddison2018  <- function( ... ) {
+  theme_minimal() +
+  theme_ipsum_rc(grid = FALSE, base_size = 11.5 * 3, axis_title_size = 11.5 * 4, axis_title_face = "bold", axis_title_just = "mc") +
+  theme(...)
+}
+
+theme_Maddison2018_legend <- function (...) {
+  theme_Maddison2018(legend.text = element_text(size = 11.5 * 2, hjust=1, vjust=0.5), legend.title=element_text(face = "bold",size = 11.5 * 2.5), legend.key.height = unit(1.75, "char")) +
+    theme(...)
+}
+
+```
+
+
+#$\alpha$. Morphology of wild morphs and domesticated seeds. What is a "morph"? How do the domesticated seeds compare?
+
+The goal here is to compare "types" of chenopods by the statistically significant morphological differences between them. The type categories are: _C. album_, _C. berlandieri_ (unsorted), _C. berlandieri_ subsp. _nuttalliae_, _C. quinoa_, _C. berlandieri_ var. _macrocalycium_, _C. berlandieri_ (red), and _C. berlandieri_ (black).
+
+
+
+```{r alpha}
+#seed morphological data from the microscope bisections
+morphology <- read_csv("/users/aperium/Dropbox/Projects/Chenopodium/Data/Bisected seeds/bisectedseeds.csv") %>%
+  select(-X33) %>%
+  mutate(
+    id_number = as.factor(id_number),
+    outer_epiderm_mean = rowMeans(.[grep("outer_epiderm", names(.))], na.rm = TRUE),
+    inner_epiderm_mean = rowMeans(.[grep("inner_epiderm", names(.))], na.rm = TRUE),
+    pericarp_mean = rowMeans(.[grep("pericarp_", names(.))], na.rm = TRUE)
+  ) %>% 
+  mutate( combined_epiderm_mean = rowSums(.[grep("epiderm_mean", names(.))], na.rm = TRUE)) %>%
+  mutate(
+    outer_epiderm_mean = ifelse(outer_epiderm_mean != 0, outer_epiderm_mean, NA),
+    inner_epiderm_mean = ifelse(inner_epiderm_mean != 0, inner_epiderm_mean, NA),
+    combined_epiderm_mean = ifelse(combined_epiderm_mean != 0, combined_epiderm_mean, NA),
+    pericarp_mean = ifelse(pericarp_mean != 0, pericarp_mean, NA)
+  ) %>%
+  # seed volume in cubic mm
+  mutate(volume = 4.0 / 3 * 3.141592653589 * length/2 * width/2 * height/2 / 1000^3) %>%
+  mutate(embryo_volume = 3.141592653589^2 * 
+           (cotyledon_thickness+radical_thickness)/4 * 
+           (cotyledon_width+radical_width)/4 *
+           ((length+width)/2-(cotyledon_thickness+radical_thickness)/2-2*combined_epiderm_mean) / 1000^3
+         ) %>%
+  mutate(perisperm_and_embryo_volume = 
+           ifelse(is.na(outer_epiderm_mean) | is.na(inner_epiderm_mean) | is.na(adherant_pericarp), NA , 
+             ifelse(adherant_pericarp == "yes" | !is.na(pericarp_mean), 
+                    (4.0 / 3 * 3.141592653589 * (length-2*(pericarp_mean+outer_epiderm_mean+inner_epiderm_mean))/2 * (width-2*(pericarp_mean+outer_epiderm_mean+inner_epiderm_mean))/2 * (height-2*(pericarp_mean+outer_epiderm_mean+inner_epiderm_mean))/2 / 1000^3),
+               ifelse( adherant_pericarp == "no", 
+                      (4.0 / 3 * 3.141592653589 *    (length-2*(outer_epiderm_mean+inner_epiderm_mean))/2 * (width-2*(outer_epiderm_mean+inner_epiderm_mean))/2 * (height-2*(outer_epiderm_mean+inner_epiderm_mean))/2 / 1000^3),
+                      NA
+  )))) %>%
+  mutate(perisperm_volume = perisperm_and_embryo_volume - embryo_volume) %>%
+  rename(color = color_bin) %>%
+  mutate(color = case_when(
+    color == "dr" ~ "darkred",
+    color == "DR" ~ "darkred",
+    color == "lr" ~ "lightred",
+    color == "LR" ~ "lightred",
+    TRUE ~ color
+  )) %>%
+  select( -texture, -(pericarp_1:cotyledon_thickness)) %>%
+  mutate(population = case_when(
+    population == "WestState3" ~ "B3",
+    population == "BentBrook1" ~ "B5",
+    population == "BentBrook4" ~ "B8",
+    population == "Sabrina2"   ~ "B12",
+    population == "Sabrina4"   ~ "B14",
+    population == "WayneHq2"   ~ "B17",
+    population == "McArthur1"  ~ "B19",
+    population == "EastUnion2" ~ "B25",
+    population == "Muncie3"    ~ "B31",
+    population == "Buchtel1"   ~ "B33",
+    population == "Athens0001" ~ "B35",
+    population == "SouthHigh1" ~ "B72",
+    population == "CbbWayneHq1-17" ~ "N3",
+    TRUE ~ population
+  )) %>%
+  mutate(seed_category = ifelse(species == "berlandieri", color, species)) %>%   
+  #mutate(seed_category = case_when(
+  #  seed_category == "lightred" ~ "red",
+  #  seed_category == "darkred"  ~ "red",
+  #  TRUE ~ seed_category
+  #)) %>% 
+  mutate(seed_category = factor(seed_category, levels = unique(seed_category[order(case_when(
+    seed_category == "album"         ~ 1,
+    seed_category == "black"         ~ 2,
+    seed_category == "lightred"      ~ 3,
+    seed_category == "darkred"       ~ 4,
+    seed_category == "red"           ~ 5,
+    seed_category == "nuttalliae"    ~ 6,
+    seed_category == "quinoa"        ~ 7,
+    seed_category == "macrocalycium" ~ 8
+  ))])))
+
+populations_data <- read_csv("/users/aperium/Dropbox/Projects/Chenopodium/Data/populations_summary_data.csv") %>%
+  select(shortcode:BL_50_mass)
+#
+morphology <- read_csv("/users/aperium/Dropbox/Projects/Chenopodium/Data/Bisected seeds/bisectedseeds.csv") %>%
+  select(-X33) %>%
+  mutate(
+    id_number = as.factor(id_number),
+    outer_epiderm_mean = rowMeans(.[grep("outer_epiderm", names(.))], na.rm = TRUE),
+    inner_epiderm_mean = rowMeans(.[grep("inner_epiderm", names(.))], na.rm = TRUE),
+    pericarp_mean = rowMeans(.[grep("pericarp_", names(.))], na.rm = TRUE),
+    diameter_mean = (length+width)/2
+  ) %>% 
+  mutate( combined_epiderm_mean = rowSums(.[grep("epiderm_mean", names(.))], na.rm = TRUE)) %>%
+  mutate(
+    outer_epiderm_mean = ifelse(outer_epiderm_mean != 0, outer_epiderm_mean, NA),
+    inner_epiderm_mean = ifelse(inner_epiderm_mean != 0, inner_epiderm_mean, NA),
+    combined_epiderm_mean = ifelse(combined_epiderm_mean != 0, combined_epiderm_mean, NA),
+    pericarp_mean = ifelse(pericarp_mean != 0, pericarp_mean, NA)
+  ) %>%
+  # seed volume in cubic mm
+  mutate(volume = 4.0 / 3 * 3.141592653589 * length/2 * width/2 * height/2 / 1000^3) %>%
+  # mutate(embryo_volume = 3.141592653589^2 * 
+  #          (cotyledon_thickness+radical_thickness)/4 * 
+  #          (cotyledon_width+radical_width)/4 *
+  #          ((length+width)/2-(cotyledon_thickness+radical_thickness)/2-2*combined_epiderm_mean) / 1000^3
+  #        ) %>%
+  mutate(embryo_volume = 
+           ifelse(is.na(outer_epiderm_mean) | is.na(inner_epiderm_mean) | is.na(adherant_pericarp), NA , 
+             ifelse(adherant_pericarp == "yes" | !is.na(pericarp_mean), 
+                    3.141592653589^2 * 
+           (cotyledon_thickness+radical_thickness)/4 * 
+           (cotyledon_width+radical_width)/4 *
+           ((length+width)/2-(cotyledon_thickness+radical_thickness)/2-2*(combined_epiderm_mean+pericarp_mean)) / 1000^3,
+               ifelse( adherant_pericarp == "no", 
+                      3.141592653589^2 * 
+           (cotyledon_thickness+radical_thickness)/4 * 
+           (cotyledon_width+radical_width)/4 *
+           ((length+width)/2-(cotyledon_thickness+radical_thickness)/2-2*combined_epiderm_mean) / 1000^3
+         ,
+                      NA
+  )))) %>%
+  mutate(perisperm_and_embryo_volume = 
+           ifelse(is.na(outer_epiderm_mean) | is.na(inner_epiderm_mean) | is.na(adherant_pericarp), NA , 
+             ifelse(adherant_pericarp == "yes" | !is.na(pericarp_mean), 
+                    (4.0 / 3 * 3.141592653589 * (length-2*(pericarp_mean+outer_epiderm_mean+inner_epiderm_mean))/2 * (width-2*(pericarp_mean+outer_epiderm_mean+inner_epiderm_mean))/2 * (height-2*(pericarp_mean+outer_epiderm_mean+inner_epiderm_mean))/2 / 1000^3),
+               ifelse( adherant_pericarp == "no", 
+                      (4.0 / 3 * 3.141592653589 *    (length-2*(outer_epiderm_mean+inner_epiderm_mean))/2 * (width-2*(outer_epiderm_mean+inner_epiderm_mean))/2 * (height-2*(outer_epiderm_mean+inner_epiderm_mean))/2 / 1000^3),
+                      NA
+  )))) %>%
+  mutate(perisperm_volume = perisperm_and_embryo_volume - embryo_volume) %>%
+  rename(color = color_bin) %>%
+  mutate(color = case_when(
+    color == "dr" ~ "darkred",
+    color == "DR" ~ "darkred",
+    color == "lr" ~ "lightred",
+    color == "LR" ~ "lightred",
+    TRUE ~ color
+  )) %>%
+  mutate(population = ifelse(population %in% populations_data$shortcode, population, 
+                             ifelse(population %in% populations_data$longcode,
+                                    populations_data$shortcode[match(population, populations_data$longcode)],
+                                    ifelse(population %in% populations_data$oldcode,
+                                           populations_data$shortcode[match(population, populations_data$old)],
+                                           population)))) %>%
+  mutate(seed_category = ifelse(species == "berlandieri", color, species)) %>%
+  #mutate(seed_category = case_when(
+  #  seed_category == "lightred" ~ "red",
+  #  seed_category == "darkred"  ~ "red",
+  #  TRUE ~ seed_category
+  #)) %>% 
+  mutate(seed_category = factor(seed_category, levels = unique(seed_category[order(case_when(
+    seed_category == "album"         ~ 6,
+    seed_category == "black"         ~ 5,
+    seed_category == "lightred"      ~ 7,
+    seed_category == "darkred"       ~ 7,
+    seed_category == "red"           ~ 4,
+    seed_category == "nuttalliae"    ~ 1,
+    seed_category == "quinoa"        ~ 2,
+    seed_category == "macrocalycium" ~ 3
+  ))]))) %>%
+  select( -texture, -(pericarp_1:color_b)) %>%
+  filter ( !(population == "Q14" & id_number == 1)) %>%
+  filter( species != "album") 
+morphology %<>%
+  mutate(taxon = populations_data$subspecies[match(population, populations_data$shortcode)]) %>%
+  mutate(taxon = ifelse(is.na(taxon), paste("C.", populations_data$species[match(population, populations_data$shortcode)]), paste("var/subsp.", taxon)))
+
+# #get the morph ratio data and format the data for adjusting germination data
+# morphcounts <- read_csv("/users/aperium/Dropbox/Projects/Chenopodium/Data/Morphcounts/morphcounts.csv") %>%
+#   mutate(population = case_when(
+#     population == "WestState3" ~ "B3",
+#     population == "BentBrook1" ~ "B5",
+#     population == "BentBrook4" ~ "B8",
+#     population == "Sabrina2"   ~ "B12",
+#     population == "Sabrina4"   ~ "B14",
+#     population == "WayneHq2"   ~ "B17",
+#     population == "McArthur1"  ~ "B19",
+#     population == "EastUnion2" ~ "B25",
+#     population == "Muncie3"    ~ "B31",
+#     population == "Buchtel1"   ~ "B33",
+#     population == "Athens0001" ~ "B35",
+#     population == "SouthHigh1" ~ "B72",
+#     population == "CbbWayneHq1-17" ~ "N3",
+#     TRUE ~ population
+#   )) %>% 
+#   filter(   population == "B3" |
+#             population == "B5" |
+#             population == "B8" |
+#             population == "B12" |
+#             population == "B14" |
+#             population == "B17" |
+#             population == "B19" |
+#             population == "B25" |
+#             population == "B31" |
+#             population == "B33" |
+#             population == "B35" |
+#             population == "B72"
+#             ) %>%
+#    select(population:black,-sample) %>%
+#   
+#   # grouping rows based on population
+#   group_by(population) %>% 
+#   summarise_at(vars(light_red,dark_red,black),funs(sum)) %>%
+#   # making new columns
+#   ungroup() %<>% mutate(
+#                 red = light_red + dark_red,
+#                 total = light_red + dark_red + black,
+#                 red_proportion = red / total,
+#                 black_proportion = black / total,
+#                 light_red_proportion = light_red / total,
+#                 dark_red_proportion = dark_red / total
+#                 ) %>%
+#  
+#   # organizing the data
+#   gather(key = "color", value = "morphproportion",red_proportion:dark_red_proportion) %>%
+#   select(population, color, morphproportion) %>%
+#   mutate( color = case_when(
+#     color == "red_proportion" ~ "rd",
+#     color == "light_red_proportion" ~ "lr",
+#     color == "dark_red_proportion" ~ "dr",
+#     color == "black_proportion" ~ "bl",
+#     TRUE ~ color
+#   )) %>%
+#   
+#   mutate(
+#     color = as.factor(color),
+#     population = as.factor(population)
+#   )
+# 
+# red_adj_values <- morphcounts %>%
+#   spread(color,morphproportion)  %>%
+#   transmute(population, 
+#             darkred = dr/rd,
+#             lightred = lr/rd) %>%
+#   gather(key = color, value = rd_rel_prop, 2:3)
+
+
+
+# ggplot(morphology, aes(x = species, y = volume)) +
+#   geom_boxplot() +
+#   ylab("aproximate volume (mm^3)") +
+#   theme_minimal()
+
+lm(outer_epiderm_mean ~ seed_category, data = morphology) %>% summary()
+aov(outer_epiderm_mean ~ seed_category, data = morphology) %>% TukeyHSD()
+
+
+lm(diameter_mean ~ seed_category, data = morphology) %>% summary()
+aov(diameter_mean ~ seed_category, data = morphology) %>% TukeyHSD()
+
+morphology %>%
+  filter(seed_category != "red" & seed_category != "black") %>%
+lm(outer_epiderm_mean * diameter_mean ~ seed_category, data = .) %>% summary()
+
+morphology %>%
+  filter(seed_category != "red" & seed_category != "black") %>%
+aov(outer_epiderm_mean * diameter_mean ~ seed_category, data = .) %>% TukeyHSD()
+
+# ggplot(morphology, aes(x = species, y = length)) +
+#   geom_boxplot() +
+#   ylab("length (µm)") +
+#   theme_minimal()
+# 
+# ggplot(morphology, aes(x = species, y = width)) +
+#   geom_boxplot() +
+#   ylab("width (µm)") +
+#   theme_minimal()
+# 
+# ggplot(morphology, aes(x = species, y = height)) +
+#   geom_boxplot() +
+#   ylab("height (µm)") +
+#   theme_minimal()
+
+#TODO make weighted distributions to model unsorted distribution.
+#TODO make plots with the three main species, then put red, black, and macrocalycium beside them.
+
+```
+
+```{r alphafigs, echo=FALSE}
+
+alpha_a <- ggplot(morphology, aes(x = seed_category, y = outer_epiderm_mean, fill = seed_category, color = seed_category)) +
+  geom_hline(yintercept = 20, color = outline_color, linetype = 3, size = 1) +
+  # geom_violin(trim = T, adjust = 1.5, alpha = 0.5, color = NA) +
+  geom_boxplot(show.legend = FALSE, size = 2*11/7, width = 2/3) +
+  ylab("outer epiderm thickness (µm)") + xlab("species or morph") +
+  scale_fill_manual(values = fill_color4) +
+  scale_color_manual(values = line_color) +
+  theme_Maddison2018()
+
+alpha_b <- ggplot(morphology, aes(x = seed_category, y = volume, fill = seed_category)) +
+  geom_hline(yintercept = 1, color = outline_color, linetype = 3, size = 1) +
+  geom_boxplot(color = outline_color, show.legend = FALSE, size = 2*11/7, width = 2/3) +
+  ylab("approximate volume (µl)") + xlab("species or morph") +
+  scale_fill_manual(values = fill_color3) +
+  theme_Maddison2018()
+
+
+alpha_c <- ggplot(morphology, aes(x = seed_category, y = pmax(length, width)/1000, fill = seed_category, color = seed_category)) +
+  geom_hline(yintercept = 1.5, color = outline_color, linetype = 3, size = 1) +
+  geom_boxplot(show.legend = FALSE, size = 2*11/7, width = 2/3) +
+  ylab("maximum diameter (mm)") + xlab("species or morph") +
+  scale_fill_manual(values = fill_color3) +
+  scale_color_manual(values = fill_color3) +
+  # ylim(0.5,NA) +
+  theme_Maddison2018()
+
+alpha_d <- ggplot(morphology, aes(x = seed_category, y = (length + width)/2000, fill = seed_category, color = seed_category)) +
+  geom_hline(yintercept = 1.5, color = outline_color, linetype = 3, size = 1) +
+  geom_boxplot(show.legend = FALSE, size = 2*11/7, width = 2/3) +
+  ylab("diameter (mm)") + xlab("species or morph") +
+  scale_fill_manual(values = fill_color4) +
+  scale_color_manual(values = line_color) +
+  # ylim(0.5,NA) +
+  theme_Maddison2018()
+
+# ggpubr::ggarrange(alpha_a, alpha_b)
+# ggpubr::ggarrange(alpha_a, alpha_c)
+ggpubr::ggarrange(alpha_a, alpha_d)
+```
+
+```{r morphology_by_taxon}
+morphology %>%
+  filter(species == "berlandieri") %>%
+ggplot(aes(x = seed_category, y = outer_epiderm_mean, fill = seed_category, color = seed_category)) +
+  geom_hline(yintercept = 20, color = outline_color, linetype = 3, size = 1) +
+  # geom_violin(trim = T, adjust = 1.5, alpha = 0.5, color = NA) +
+  geom_boxplot(show.legend = FALSE, size = 2*11/7, width = 2/3) +
+  ylab("outer epiderm thickness (µm)") + xlab("species or morph") +
+  scale_fill_manual(values = fill_color4) +
+  scale_color_manual(values = line_color) +
+  theme_Maddison2018() +
+  facet_wrap(~taxon)
+#
+morphology %>%
+  filter(species == "berlandieri") %>%
+ggplot(aes(x = seed_category, y = diameter_mean, fill = seed_category, color = seed_category)) +
+  geom_hline(yintercept = 20, color = outline_color, linetype = 3, size = 1) +
+  # geom_violin(trim = T, adjust = 1.5, alpha = 0.5, color = NA) +
+  geom_boxplot(show.legend = FALSE, size = 2*11/7, width = 2/3) +
+  ylab("outer epiderm thickness (µm)") + xlab("species or morph") +
+  scale_fill_manual(values = fill_color4) +
+  scale_color_manual(values = line_color) +
+  theme_Maddison2018() +
+  facet_wrap(~taxon)
+
+morphology %>%
+  group_by(seed_category) %>%
+  #filter(!is.na(length)) %>%
+  #filter(!is.na(width)) %>%
+  summarise(n = n(),
+            median_outer_epiderm = median(outer_epiderm_mean, na.rm = TRUE),
+            mean_outer_epiderm = mean(outer_epiderm_mean, na.rm = TRUE),
+            median_diameter = median((length + width)/2000, na.rm = TRUE),
+            mean_diameter = mean((length + width)/2000, na.rm = TRUE))
+
+# getting samples sizes
+morphology_n <- morphology %>%
+  group_by(seed_category, population) %>%
+  summarize(n = n())
+
+#test to see if the the seeds are above or below the domestication threshold.
+morphology %>%
+  filter(seed_category == "macrocalycium") %>%
+  select(outer_epiderm_mean) %>%
+  unlist() %>%
+  t.test(mu = 20)
+
+#test to see if red and black are different.
+tmpred <- morphology %>%
+  filter(seed_category == "red") %>%
+  select(outer_epiderm_mean) %>%
+  unlist()
+tmpblack <- morphology %>%
+  filter(seed_category == "black") %>%
+  select(outer_epiderm_mean) %>%
+  unlist()
+t.test(tmpred, tmpblack)
+
+#test to see if red and black are different.
+tmpred <- morphology %>%
+  filter(seed_category == "red") %>%
+  select(diameter_mean) %>%
+  unlist()
+tmpblack <- morphology %>%
+  filter(seed_category == "black") %>%
+  select(diameter_mean) %>%
+  unlist()
+t.test(tmpred, tmpblack)
+
+#TODO I'd like to do an ANOVA on the natural varience of C. berlandieri, so the red and black numbers need to be merged and weighted according to the morph proportion of each population. Helpful functions: weighted.mean, spatstat::weighted.quantile, spatstat::weighted.var  BUT this is impractical and is a confusing approach.
+
+
+```
+
+
+```{r cv, eval = FALSE}
+
+morphology_cv <- morphology %>%
+  filter ( !(population == "Q14" & id_number == 1)) %>%
+  group_by(population, species) %>%
+  summarize(
+    outer_epiderm_sd = sd(outer_epiderm_mean),
+    outer_epiderm_cv = sd(outer_epiderm_mean)/mean(outer_epiderm_mean),
+    outer_epiderm_var = var(outer_epiderm_mean),
+    volume_sd = sd(volume),
+    volume_cv = sd(volume)/mean(volume),
+    volume_var = var(volume)
+  ) 
+
+ggplot(morphology_cv, aes(x = species, y = outer_epiderm_sd)) +
+  geom_boxplot() +
+  ylab("outer epiderm sd") +
+  theme_minimal()
+
+ggplot(morphology_cv, aes(x = species, y = outer_epiderm_cv)) +
+  geom_boxplot() +
+  ylab("outer epiderm cv") +
+  theme_minimal()
+```
+
+```{r, eval=FALSE}
+
+morphology_plot <- morphology %>%
+  filter(seed_category != "album")
+  # filter(!is.na(volume) & !is.na(outer_epiderm_mean))
+# just plots
+
+ggplot(morphology_plot, aes(x = perisperm_and_embryo_volume, y = outer_epiderm_mean, color=seed_category)) +
+  geom_point(size = 3)+
+  scale_color_manual(values = fill_color3) +
+  labs(x="seed interior volume (mm^3)", y= "outer epiderm thickness (µm)") +
+  theme_minimal()
+
+ggplot(morphology_plot, aes(x = volume, y = outer_epiderm_mean, color=seed_category)) +
+  geom_point(size = 3)+
+  scale_color_manual(values = fill_color3) +
+  labs(x="seed (mm^3)", y= "outer epiderm thickness (µm)") +
+  theme_minimal()
+
+ggplot(morphology_plot, aes(x = (length+width)/2, y = outer_epiderm_mean, color=seed_category)) +
+  geom_point(size = 3)+
+  scale_color_manual(values = fill_color3) +
+  labs(x="seed (mm^3)", y= "outer epiderm thickness (µm)") +
+  theme_minimal()
+
+```
+
+
+```{r, eval=FALSE}
+morphology_plot %>%
+  transmute(diameter = (length+width)/2, outer_epiderm = outer_epiderm_mean) %>%
+  na.omit() %>%
+vegan::metaMDS(.)
+```
+
+
+#$\beta$. Is there morphological variation between wild plants?
+
+the proportions are not the same without M1 (X-squared = 1137.1, df = 25, p-value < 2.2e-16)
+the proportions are not the same with M1    (X-squared = 1368.6, df = 26, p-value < 2.2e-16)
+
+```{r}
+# get the germination data
+germinations <- read_csv("/Users/aperium/Dropbox/Projects/Chenopodium/Data/Stratification/raw_strat_germ_data.csv") %>%
+  mutate( population = as.factor(population),
+          color      = as.factor(color),
+          germinated_this_day = ifelse(is.na(germinated_this_day),0,germinated_this_day),
+          rotten = ifelse(is.na(rotten),0,rotten),
+          malformed = ifelse(is.na(malformed),0,malformed),
+          date       = as.Date(date, format = "%d-%b-%y"),
+          treatment = if_else(treatment >= 9 & treatment < 10, 9, treatment)) #added to address the off by one day
+# we have a zeros problem in the germination data
+# this will fill in all of the missing zeros.
+variables <- data.frame("population","color","replicate","treatment","days_of_incubation","germinated_this_day","rotten","malformed")
+populations = c("B3","B5","B8","B14","B17","B19","B25","B31","B33","B72","N3")
+colors = c("bl","lr","dr","nuttalliae")
+replicates = c(1:4)
+treatments = c(0,1,2,4,6,9,12)
+incubations_days = c(0:14)
+#
+population_list <- c()
+color_list <- c()
+replicate_list <- c()
+treatment_list <- c()
+incubation_day_list <- c()
+for(i in 1:11) {
+  for(j in 1:4) {
+    if(!(i==2 & j==2) & ((i<11 & j<4) | (i==11 & j==4))) {
+      for(k in 1:4) {
+        if((i<11 & k==1) | i==11) {
+          for(l in 1:7) {
+            for(m in 1:15) {
+              #print(paste(populations[i],colors[j],replicates[k],treatments[l],incubations_days[m]))
+              population_list <- c(population_list,populations[i])
+              color_list <- c(color_list,colors[j])
+              replicate_list <- c(replicate_list,replicates[k])
+              treatment_list <- c(treatment_list,treatments[l])
+              incubation_day_list <- c(incubation_day_list,incubations_days[m])
+            }
+          }
+        }
+      }
+    }
+  }
+}
+#
+blank_table <- tibble(
+  population = population_list,
+  color = color_list,
+  replicate = replicate_list,
+  treatment = treatment_list,
+  days_of_incubation = incubation_day_list
+)
+#
+# add all those missing zeros
+germinations %<>% full_join(blank_table) %>%
+  filter(treatment <= 10) %>%
+  mutate(
+    germinated_this_day = if_else(!is.na(germinated_this_day),germinated_this_day,0,0),
+    rotten = if_else(!is.na(rotten),rotten,0,0),
+    malformed = if_else(!is.na(malformed),malformed,0,0)
+    ) %>%
+  #and cleaning up
+  filter(days_of_incubation >= 0)
+
+#get the morph ratio data and format the data for adjusting germination data
+morphcounts <- read_csv("/users/aperium/Dropbox/Projects/Chenopodium/Data/Morphcounts/morphcounts.csv") %>%
+  # removing old data
+  filter(is.na(subpopulation) | (subpopulation != "apical" & subpopulation != "latteral")) %>%
+  filter(is.na(parental_population) | parental_population == "wild" | parental_population == "cultivated") %>%
+  # grouping rows based on population
+  group_by(population) %>% 
+  summarise_at(vars(light_red,dark_red,black),funs(sum)) %>% 
+  ungroup() %>%
+  mutate(
+    red = light_red + dark_red,
+    total = light_red + dark_red + black,
+    red_proportion = red / total,
+    black_proportion = black / total,
+    light_red_proportion = light_red / total,
+    dark_red_proportion = dark_red / total
+    ) %>%
+  arrange(red_proportion) %>% ungroup() %>%
+  mutate(population = ifelse(population %in% populations_data$shortcode, population, 
+                             ifelse(population %in% populations_data$longcode,
+                                    populations_data$shortcode[match(population, populations_data$longcode)],
+                                    ifelse(population %in% populations_data$oldcode,
+                                           populations_data$shortcode[match(population, populations_data$old)],
+                                           population)))) %>%
+  # filter(   population == "B3" |
+  #           population == "B5" |
+  #           population == "B8" |
+  #           population == "B14" |
+  #           population == "B17" |
+  #           population == "B19" |
+  #           population == "B25" |
+  #           population == "B31" |
+  #           population == "B33" |
+  #           population == "B72" |
+  #           population == "N3"
+  #           ) %>%
+  mutate(
+    population = as.factor(population)
+  )
+
+max_germ_data <- germinations %>%
+  filter(days_of_incubation >= 0) %>%
+  group_by(population, color, replicate, treatment) %>% summarise(germinated = sum(germinated_this_day)/50) %>%
+  ungroup() %>%
+  mutate(treatment = as.factor(treatment)) %>%
+  #adjust germination to remove "non-viable" seeds
+  group_by(population,color) %>%
+  summarise(max_germ = max(germinated)) %>%
+  filter(color != "nuttalliae") %>%
+  spread(key = color, value = max_germ) %>%
+  ungroup() %>%
+  transmute(population,
+            lr_max_germ = lr,
+            dr_max_germ = dr,
+            bl_max_germ = bl)
+
+tidy_samples <- morphcounts %>%
+  select(population, red_proportion, black_proportion, total) %>%
+  gather(key = "color", value = "proportion", red_proportion, black_proportion ) %>%
+  mutate( pop_total = total,
+          color = case_when(
+            color == "black_proportion" ~ "black",
+            color == "red_proportion" ~ "red",
+            TRUE ~ color
+          )) %>%
+  select( -total )  %>%
+  mutate(population = factor(population, levels = unique(population[order(as.double(color=="red")-proportion)]))) %>%
+  mutate(species = case_when(
+    substr(population, 1, 1) == "A" ~ "album",
+    substr(population, 1, 1) == "M" ~ "macrocalycium",
+    substr(population, 1, 1) == "Q" ~ "quinoa",
+    substr(population, 1, 1) == "B" ~ "berlandieri"
+  )) %>%
+  filter( species == "berlandieri" | species == "macrocalycium")
+
+ggplot() +
+  geom_col(data = tidy_samples, aes(x=population,y=proportion,fill=color), position="fill") +
+  # geom_text(data = spread(tidy_samples, color, proportion), aes(x=population,y=0.96,label = paste0("n = ",pop_total)), color = "white", size = 11.5/1.5) +
+  geom_text(data = spread(tidy_samples, color, proportion), aes(x=population,y=1-0.02,label = pop_total), color = "white", size = 5, angle = 90, hjust = 1) +
+  geom_text(data = filter(tidy_samples, color == "red" & proportion < .85), aes(x=population,y=proportion - 0.02,label = round(proportion,2)), color = "white", size = 5, angle = 90, hjust = 1) +
+  geom_text(data = filter(tidy_samples, color == "black" & proportion > 0.15), aes(x=population,y= 1-proportion + 0.02,label = round(proportion,2)), color = "white", size = 5, angle = 90, hjust = 0) +
+  scale_fill_manual(values=fill_color3, labels = c("black", "red"), name = "seed morph") +
+  xlab("population")+ylab("proportion") +
+  theme_minimal()
+
+# the proportions are not the same without M1 (X-squared = 1137.1, df = 25, p-value < 2.2e-16)
+# the proportions are not the same with M1    (X-squared = 1368.6, df = 26, p-value < 2.2e-16)
+tidy_samples_proptest <- tidy_samples %>%
+  filter(color == "red") %>%
+  mutate(successes = as.integer(proportion * pop_total))
+
+prop.test(tidy_samples_proptest$successes,tidy_samples_proptest$pop_total)
+
+
+```
+
+```{r}
+
+#get the morph ratio data and format the data for adjusting germination data
+morphcounts2 <- read_csv("/users/aperium/Dropbox/Projects/Chenopodium/Data/Morphcounts/morphcounts.csv") %>%
+  # removing old data
+  filter(is.na(subpopulation) | (subpopulation != "apical" & subpopulation != "latteral")) %>%
+  filter(is.na(parental_population) | parental_population == "wild" | parental_population == "cultivated") %>%
+  mutate(
+    red = light_red + dark_red,
+    total = light_red + dark_red + black,
+    red_proportion = red / total,
+    black_proportion = black / total,
+    light_red_proportion = light_red / total,
+    dark_red_proportion = dark_red / total
+    ) %>%
+  arrange(red_proportion) %>% ungroup() %>%
+  mutate(population = ifelse(population %in% populations_data$shortcode, population, 
+                             ifelse(population %in% populations_data$longcode,
+                                    populations_data$shortcode[match(population, populations_data$longcode)],
+                                    ifelse(population %in% populations_data$oldcode,
+                                           populations_data$shortcode[match(population, populations_data$old)],
+                                           population)))) %>%
+  # filter(   population == "B3" |
+  #           population == "B5" |
+  #           population == "B8" |
+  #           population == "B14" |
+  #           population == "B17" |
+  #           population == "B19" |
+  #           population == "B25" |
+  #           population == "B31" |
+  #           population == "B33" |
+  #           population == "B72" |
+  #           population == "N3"
+  #           ) %>%
+  mutate(
+    population = as.factor(population)
+  )
+
+tidy_samples2 <- morphcounts2 %>%
+  select(population, red_proportion, black_proportion, total) %>%
+  gather(key = "color", value = "proportion", red_proportion, black_proportion ) %>%
+  mutate( pop_total = total,
+          color = case_when(
+            color == "black_proportion" ~ "black",
+            color == "red_proportion" ~ "red",
+            TRUE ~ color
+          )) %>%
+  select( -total ) %>%
+  mutate(species = case_when(
+    substr(population, 1, 1) == "A" ~ "album",
+    substr(population, 1, 1) == "M" ~ "macrocalycium",
+    substr(population, 1, 1) == "Q" ~ "quinoa",
+    substr(population, 1, 1) == "B" ~ "berlandieri"
+  )) %>%
+  filter( species == "berlandieri" | species == "macrocalycium")
+
+tidy_samples2_red <- tidy_samples2 %>%
+  filter(color == "red")
+
+tidy_samples2_seedcount <- tidy_samples2 %>%
+  filter(color == "red") %>%
+  group_by(population) %>%
+  summarise(pop_total = sum(pop_total),
+            proportion_median = median(proportion))  %>%
+  ungroup() %>%
+  mutate(population = factor(population, levels =  unique(population[order(proportion_median)])))
+
+## TODO I really should be doing a weighted median/mean based on the seedcount of each sample
+
+ggplot() +
+  geom_boxplot(data = tidy_samples2_red, aes(x=population,y=proportion)) +
+  geom_text(data = tidy_samples2_seedcount, aes(x=population,y=1+0.02,label = paste0(pop_total)), size = 2, angle = 0, hjust = 0.5) +
+  # geom_text(data = spread(tidy_samples, color, proportion), aes(x=population,y=1-0.02,label = pop_total), color = "white", size = 5, angle = 90, hjust = 1) +
+  # geom_text(data = filter(tidy_samples, color == "red" & proportion < .85), aes(x=population,y=proportion - 0.02,label = round(proportion,2)), color = "white", size = 5, angle = 90, hjust = 1) +
+  # geom_text(data = filter(tidy_samples, color == "black" & proportion > 0.15), aes(x=population,y= 1-proportion + 0.02,label = round(proportion,2)), color = "white", size = 5, angle = 90, hjust = 0) +
+  xlab("population")+ylab("proportion") +
+  theme_minimal()
+
+```
+
+```{r}
+tidy_samples2_red %<>%
+  group_by(population, color, species)
+
+weighted_red_proportions <- 
+  summarise(tidy_samples2_red, stat1 = spatstat::weighted.quantile(proportion, pop_total)[1]) %>%
+  left_join(summarise(tidy_samples2_red, stat2 = spatstat::weighted.quantile(proportion, pop_total)[2])) %>%
+  left_join(summarise(tidy_samples2_red, stat3 = spatstat::weighted.quantile(proportion, pop_total)[3])) %>%
+  left_join(summarise(tidy_samples2_red, stat4 = spatstat::weighted.quantile(proportion, pop_total)[4])) %>%
+  left_join(summarise(tidy_samples2_red, stat5 = spatstat::weighted.quantile(proportion, pop_total)[5])) %>%
+  ungroup() %>%
+  mutate(population = factor(population, levels = unique(population[order(0-stat3)])))
+
+
+# ggplot(weighted_red_proportions, aes(x = population)) + 
+#   geom_linerange(aes(ymin = stat1, ymax = stat5), size = 1.5, color = outline_color) +
+#   geom_rect(aes(ymin = stat2, ymax = stat4, xmin = as.numeric(population) - .75/2, xmax = as.numeric(population) + .75/2, fill = color), color = outline_color, size = 2) +
+#   geom_segment((aes(y = stat3, yend = stat3, x = as.numeric(population) - .75/2, xend = as.numeric(population) + .75/2)), color = outline_color, size = 3) +
+#   scale_fill_manual(values = fill_color3, guide = F) +
+#   xlab("Population") + ylab("Proportion of Red Morphs") +
+#   theme_Maddison2018(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))
+
+ggplot(weighted_red_proportions, aes(x = population)) + 
+  geom_linerange(aes(ymin = stat1, ymax = stat5, color = color), size = 2) +
+  geom_crossbar(aes(ymin = stat2, ymax = stat4, y = stat3, fill = color, color = color), size = 2, fatten = 1.5, width = 0.75, show.legend = F) +
+  scale_fill_manual(values = fill_color4, guide = F) +
+  scale_color_manual(values = line_color, guide = F) +
+  xlab("population") + ylab("proportion of red morphs") +
+  theme_Maddison2018(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))
+
+ 
+```
+
+
+#$\gamma$. Are physiological phenotypes dependent on morphological phenotypes?
+
+##$\gamma$.1. Regressions on germination fraction by stratification and seed morph
+Red and black do not have different responses to stratification (Adjusted R-squared:  0.03265, F-statistic: 2.114 on 3 and 96 DF,  p-value: 0.1035). (se = 0.275, adj. r2 = 0.0327, f = 2.11 on 3 and 96 df,  p = 0.104)
+black do not have a pattern of improving germination with stratification (Adjusted R-squared:  0.04464, F-statistic: 3.944 on 1 and 62 DF,  p-value: 0.05147) (se = 0.286, adj. r2 = 0.0446, f = 3.94 on 1 and 62 df, p = 0.0515)
+
+
+```{r}
+data <- read_csv("/Users/aperium/Dropbox/Projects/Chenopodium/Data/Stratification/raw_strat_germ_data.csv") %>%
+  mutate( population = as.factor(population),
+          color      = as.factor(color),
+          germinated_this_day = ifelse(is.na(germinated_this_day),0,germinated_this_day),
+          rotten = ifelse(is.na(rotten),0,rotten),
+          malformed = ifelse(is.na(malformed),0,malformed),
+          date       = as.Date(date, format = "%d-%b-%y"),
+          treatment = if_else(treatment >= 9 & treatment < 10, 9, treatment)) #added to address the off by one day problem
+
+# we have a zeros problem
+# this will fill in all of the missing zeros.
+variables <- data.frame("population","color","replicate","treatment","days_of_incubation","germinated_this_day","rotten","malformed")
+populations = c("B3","B5","B8","B14","B17","B19","B25","B31","B33","B72","N3")
+colors = c("bl","lr","dr","nuttalliae")
+replicates = c(1:4)
+treatments = c(0,1,2,4,6,9,12)
+incubations_days = c(0:14)
+
+population_list <- c()
+color_list <- c()
+replicate_list <- c()
+treatment_list <- c()
+incubation_day_list <- c()
+for(i in 1:11) {
+  for(j in 1:4) {
+    if(!(i==2 & j==2) & ((i<11 & j<4) | (i==11 & j==4))) {
+      for(k in 1:4) {
+        if((i<11 & k==1) | i==11) {
+          for(l in 1:7) {
+            for(m in 1:15) {
+              #print(paste(populations[i],colors[j],replicates[k],treatments[l],incubations_days[m]))
+              population_list <- c(population_list,populations[i])
+              color_list <- c(color_list,colors[j])
+              replicate_list <- c(replicate_list,replicates[k])
+              treatment_list <- c(treatment_list,treatments[l])
+              incubation_day_list <- c(incubation_day_list,incubations_days[m])
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+blank_table <- tibble(
+  population = population_list,
+  color = color_list,
+  replicate = replicate_list,
+  treatment = treatment_list,
+  days_of_incubation = incubation_day_list
+)
+
+# add all those missing zeros
+data %<>% full_join(blank_table) %>%
+  filter(treatment <= 10) %>%
+  mutate(
+    germinated_this_day = if_else(!is.na(germinated_this_day),germinated_this_day,0,0),
+    rotten = if_else(!is.na(rotten),rotten,0,0),
+    malformed = if_else(!is.na(malformed),malformed,0,0)
+    ) %>%
+  #and cleaning up
+  filter(days_of_incubation >= 0)
+
+data1 <- data %>%
+  filter(days_of_incubation >= 0) %>%
+  group_by(population, color, replicate, treatment) %>% summarise(germinated = sum(germinated_this_day)/50) %>%
+  ungroup() %>%
+  mutate(treatment = as.factor(treatment))
+
+max_germ_data <- data1 %>%
+  group_by(population,color) %>%
+  summarise(max_germ = max(germinated))
+
+data2 <- left_join(data1,max_germ_data) %>%
+  transmute(population, color, replicate, treatment, germ_adj = if_else(max_germ!=0,germinated/max_germ,NaN))
+
+morphcounts <- read_csv("/users/aperium/Dropbox/Projects/Chenopodium/Data/Morphcounts/morphcounts.csv") %>%
+  # removing old data
+  filter(is.na(subpopulation) | (subpopulation != "apical" & subpopulation != "latteral")) %>%
+  filter(is.na(parental_population) | parental_population == "wild" | parental_population == "cultivated") %>%
+  # grouping rows based on population
+  group_by(population) %>% 
+  summarise_at(vars(light_red,dark_red,black),funs(sum)) %>%
+  # making new columns
+  ungroup() %<>% mutate(
+                red = light_red + dark_red,
+                total = light_red + dark_red + black,
+                red_proportion = red / total,
+                black_proportion = black / total,
+                light_red_proportion = light_red / total,
+                dark_red_proportion = dark_red / total
+                ) %>%
+  mutate(population = ifelse(population %in% populations_data$shortcode, population, 
+                             ifelse(population %in% populations_data$longcode,
+                                    populations_data$shortcode[match(population, populations_data$longcode)],
+                                    ifelse(population %in% populations_data$oldcode,
+                                           populations_data$shortcode[match(population, populations_data$old)],
+                                           population)))) %>%
+  # mutate(population = case_when(
+  #   population == "WestState3" ~ "B3",
+  #   population == "BentBrook1" ~ "B5",
+  #   population == "BentBrook4" ~ "B8",
+  #   population == "Sabrina4" ~ "B14",
+  #   population == "WayneHq2" ~ "B17",
+  #   population == "McArthur1" ~ "B19",
+  #   population == "EastUnion2" ~ "B25",
+  #   population == "Muncie3" ~ "B31",
+  #   population == "Buchtel1" ~ "B33",
+  #   population == "Athens0002" ~ "B72",
+  #   population == "CbbWayneHq1-17" ~ "N3",
+  #   TRUE ~ population
+  # )) %>%
+  # organizing the data
+  gather(key = "color", value = "morphproportion",red_proportion:dark_red_proportion) %>%
+  select(population, color, morphproportion) %>%
+  mutate( color = case_when(
+    color == "red_proportion" ~ "rd",
+    color == "light_red_proportion" ~ "lr",
+    color == "dark_red_proportion" ~ "dr",
+    color == "black_proportion" ~ "bl",
+    TRUE ~ color
+  )) %>%
+  # filter(   population == "B3" |
+  #           population == "B5" |
+  #           population == "B8" |
+  #           population == "B14" |
+  #           population == "B17" |
+  #           population == "B19" |
+  #           population == "B25" |
+  #           population == "B31" |
+  #           population == "B33" |
+  #           population == "B72" |
+  #           population == "N3"
+  #           ) %>%
+  mutate(
+    color = as.factor(color),
+    population = as.factor(population)
+  )
+
+rd_adj1 <- morphcounts %>%
+  spread(color,morphproportion) %>%
+  mutate(bl = 1,
+         dr = dr/rd,
+         lr = lr/rd) %>%
+  select(-rd) %>%
+  gather(key = color, value = morphproportion, bl:lr) %>%
+  add_row(population = "N3", color = "nuttalliae", morphproportion = 1) %>%
+  left_join(data2,.) %>%
+  mutate(adjusted_germination = germ_adj * morphproportion) %>%
+  select(-germ_adj,-morphproportion)
+
+nut_filter <- rd_adj1 %>%
+  filter(color == "nuttalliae")
+
+color_filter <- rd_adj1 %>%
+  filter(color != "nuttalliae") %>%
+  spread(color,adjusted_germination) %>%
+  mutate(rd = lr + dr,
+         bl = bl) %>%
+  select( -dr, -lr) %>%
+  gather(key = "color", value = "adjusted_germination",bl:rd)
+
+rd_adj2 <- bind_rows(color_filter,nut_filter) %>%
+  ungroup() %>%
+  mutate(
+    population = as.factor(population),
+    color = factor(case_when(color == "rd" ~ "red", color == "bl" ~ "black", TRUE ~ color), levels = c( "nuttalliae", "red", "black" ))
+  ) %>%
+  filter(!is.na(adjusted_germination))
+
+rd_adj5 <- rd_adj2 %>%
+  mutate( treatment = as.numeric(levels(treatment)[treatment]))
+
+lm(adjusted_germination ~ treatment + color, data = rd_adj5) %>% summary()
+
+rd_adj5 %>%
+  filter(color == "red" | color == "black") %>%
+  lm(adjusted_germination ~ treatment * color, data = .) %>%
+  summary()
+
+nut_reg <- rd_adj5 %>%
+  filter(color == "nuttalliae") %>%
+  lm(formula = adjusted_germination ~ treatment, data = .)
+rd_reg <- rd_adj5 %>%
+  filter(color == "red") %>%
+  lm(formula = adjusted_germination ~ treatment, data = .)
+bl_reg <- rd_adj5 %>%
+  filter(color == "black") %>%
+  lm(formula = adjusted_germination ~ treatment, data = .)
+
+
+# rd_adj5 %>%
+# ggplot(aes(x = treatment, y = adjusted_germination, color = color)) +
+#   geom_jitter(width = 0.1) +
+#   geom_segment(aes(x = min(rd_adj5 %>% filter(color =="nuttalliae") %>% .$treatment), y = min(nut_reg$fitted.values), xend = max(rd_adj5 %>% filter(color =="nuttalliae") %>% .$treatment), yend = max(nut_reg$fitted.values), color = "nuttalliae")) +
+#   geom_segment(aes(x = min(rd_adj5 %>% filter(color =="rd") %>% .$treatment), y = min(rd_reg$fitted.values), xend = max(rd_adj5 %>% filter(color =="rd") %>% .$treatment), yend = max(rd_reg$fitted.values), color = "rd")) +
+#   scale_color_manual(values = c("bl"="grey30", "rd"="firebrick3", "nuttalliae" = "gold")) +
+#   geom_segment(aes(x = min(rd_adj5 %>% filter(color =="bl") %>% .$treatment), y = min(bl_reg$fitted.values), xend = max(rd_adj5 %>% filter(color =="bl") %>% .$treatment), yend = max(bl_reg$fitted.values), color = "bl")) +
+#   scale_color_manual(values = c("bl"="grey30", "rd"="firebrick3", "nuttalliae" = "gold")) +
+#   scale_x_continuous(breaks = c(0,1,2,4,6,9), minor_breaks = c(1*0:9)) +
+#   theme_minimal()
+
+#Red and black do not have different responses to stratification (Adjusted R-squared:  0.03265, F-statistic: 2.114 on 3 and 96 DF,  p-value: 0.1035)
+rd_adj5 %>%
+  filter(color == "black" | color == "red") %>%
+  lm(adjusted_germination ~ treatment * color, data = .) %>% summary()
+
+#black do not have a pattern of improving with stratification (Adjusted R-squared:  0.04464, F-statistic: 3.944 on 1 and 62 DF,  p-value: 0.05147)
+rd_adj5 %>%
+  filter(color == "black") %>%
+  lm(adjusted_germination ~ treatment, data = .) %>% summary()
+
+# rd_adj5 %>%
+# ggplot(aes(x = treatment, y = adjusted_germination, color = color, fill = color)) +
+#   geom_jitter(width = 0.1) +
+#   geom_smooth(method = "lm", formula = y ~ x) +
+#   scale_color_manual(values = c("bl"="grey30", "rd"="firebrick3", "nuttalliae" = "gold")) +
+#   scale_fill_manual(values = c("bl"="grey30", "rd"="firebrick3", "nuttalliae" = "gold")) +
+#   scale_x_continuous(breaks = c(0,1,2,4,6,9), minor_breaks = c(1*0:9)) +
+#   theme_minimal()
+
+gamma_1 <- rd_adj5 %>%
+ggplot(aes(x = treatment, y = adjusted_germination, color = color, fill = color)) +
+  # geom_jitter(width = 0.1) +
+  geom_smooth(method = "lm", formula = y ~ x) +
+  geom_boxplot(data = rd_adj5 %>% filter(treatment==0), fill = NA, size = 2)+
+  geom_boxplot(data = rd_adj5 %>% filter(treatment==1), fill = NA, size = 2)+
+  geom_boxplot(data = rd_adj5 %>% filter(treatment==2), fill = NA, size = 2)+
+  geom_boxplot(data = rd_adj5 %>% filter(treatment==4), fill = NA, size = 2)+
+  geom_boxplot(data = rd_adj5 %>% filter(treatment==6), fill = NA, size = 2)+
+  geom_boxplot(data = rd_adj5 %>% filter(treatment==9), fill = NA, size = 2)+
+  scale_color_manual(values = fill_color3) +
+  scale_fill_manual(values = fill_color3) +
+  scale_x_continuous(breaks = c(0,1,2,4,6,9), minor_breaks = c(1*0:9)) +
+  xlab("stratification period (weeks)") + ylab("germination proportion") +
+  theme_Maddison2018_legend()
+
+# rd_adj5 %>%
+# ggplot(aes(x = treatment, y = adjusted_germination, color = color, fill = color)) +
+#   # geom_jitter(width = 0.1) +
+#   geom_smooth(method = "lm", formula = y ~ x) +
+#   geom_boxplot(data = rd_adj5 %>% filter(treatment==0), fill = NA)+
+#   geom_boxplot(data = rd_adj5 %>% filter(treatment==1), fill = NA)+
+#   geom_boxplot(data = rd_adj5 %>% filter(treatment==2), fill = NA)+
+#   geom_boxplot(data = rd_adj5 %>% filter(treatment==4), fill = NA)+
+#   geom_boxplot(data = rd_adj5 %>% filter(treatment==6), fill = NA)+
+#   geom_boxplot(data = rd_adj5 %>% filter(treatment==9), fill = NA)+
+#   scale_color_manual(values = c("bl"="grey30", "rd"="firebrick3", "nuttalliae" = "gold")) +
+#   scale_fill_manual(values = c("bl"="grey30", "rd"="firebrick3", "nuttalliae" = "gold")) +
+#   scale_x_continuous(breaks = c(0,1,2,4,6,9), minor_breaks = c(1*0:9)) +
+#   theme_minimal()
+```
+
+
+
+##$\gamma$.2. Germination speed by seed morph without stratification
+Red morphs germinate quicker than black morphs with no stratification (t = 9.264, df = 318.94, p-value < 2.2e-16) and with stratification (t = 21.477, df = 1645.5, p-value < 2.2e-16)
+
+```{r}
+
+data1 <- data %>%
+  filter(days_of_incubation >= 0)
+# just lr and dr adjusted to a normalized value, to simulate tests with 50 "rd" seeds.
+rd_adj1 <- morphcounts %>%
+  spread(color,morphproportion) %>%
+  mutate(bl = 1,
+         dr = dr/rd,
+         lr = lr/rd) %>%
+  select(-rd) %>%
+  gather(key = color, value = morphproportion, bl:lr) %>%
+  add_row(population = "N3", color = "nuttalliae", morphproportion = 1) %>%
+  left_join(data1,.) %>%
+  mutate(germinated_this_day_adj = germinated_this_day * morphproportion) %>%
+  select(-germinated_this_day,-morphproportion) %>%
+  select(-rotten, -malformed, -date, -notes)
+nut_filter <- rd_adj1 %>%
+  filter(color == "nuttalliae")
+color_filter <- rd_adj1 %>%
+  filter(color != "nuttalliae") %>%
+  spread(color,germinated_this_day_adj) %>%
+  mutate(rd = lr + dr) %>%
+  select( -dr, -lr) %>%
+  gather(key = "color", value = "germinated_this_day_adj",bl:rd)
+rd_adj2 <- bind_rows(color_filter,nut_filter) %>%
+  ungroup() %>%
+  mutate(
+    population = as.factor(population),
+    color = as.factor(color)
+  ) %>%
+  filter(!is.na(germinated_this_day_adj))
+
+rd_adj4 <- rd_adj2 %>%
+  #the nuttalliae germinated too much in the stratification to make sense of anything
+  filter(treatment == 0) %>% 
+  group_by(color, days_of_incubation) %>%
+  summarise(mean_germs = mean(germinated_this_day_adj)) %>%
+  mutate(days_of_incubation = as.double(days_of_incubation)) %>%
+  group_by(color)
+
+gamma_2 <- rd_adj4 %>%
+summarise(stat1 = spatstat::weighted.quantile(days_of_incubation, mean_germs)[1]) %>%
+  left_join(summarise(rd_adj4, stat2 = spatstat::weighted.quantile(days_of_incubation, mean_germs)[2])) %>%
+  left_join(summarise(rd_adj4, stat3 = spatstat::weighted.quantile(days_of_incubation, mean_germs)[3])) %>%
+  left_join(summarise(rd_adj4, stat4 = spatstat::weighted.quantile(days_of_incubation, mean_germs)[4])) %>%
+  left_join(summarise(rd_adj4, stat5 = spatstat::weighted.quantile(days_of_incubation, mean_germs)[5])) %>%
+  mutate(stat1b = (1.5 * ( 2 * stat2 - stat4)),
+         stat5b = (1.5 * ( 2 * stat4 - stat2))) %>%
+  mutate(stat1 = if_else(stat1>stat1b,stat1,stat1b), 
+         stat5 = if_else(stat5<stat5b,stat5,stat5b)) %>%
+  mutate(color = as.character(color)) %>%
+  mutate(color = case_when(
+    color == "bl" ~ "black",
+    color == "rd" ~ "red",
+    TRUE ~ color
+  )) %>%
+  mutate( color = factor(color, levels = c("nuttalliae", "red", "black"))) %>%
+ggplot(aes(x = color)) + 
+  geom_errorbar(aes(ymin = stat1, ymax = stat5, width = .75/2), size = 1.5, color = outline_color) +
+  geom_rect(aes(fill = color, ymin = stat2, ymax = stat4, xmin = as.numeric(color) - .75/2, xmax = as.numeric(color) + .75/2), color = outline_color, size = 2) +
+  geom_segment((aes(y = stat3, yend = stat3, x = as.numeric(color) - .75/2, xend = as.numeric(color) + .75/2)), color = outline_color, size = 3) +
+  # scale_color_manual(values = fill_color, guide = F) +
+  scale_fill_manual(values = fill_color, guide = F) +
+  xlab("seed morph") + ylab("days to germiation") +
+  scale_y_continuous(limits = c(0,14), breaks = c(0,4*1:3)) +
+  scale_x_discrete(expand = c(0.05, 0.05)) +
+  theme_minimal()
+
+rd_adj12 <- rd_adj4 %>%
+  filter(color == "rd" | color == "bl")
+
+germ_speed <- summarise(rd_adj12, var = spatstat::weighted.var(days_of_incubation, mean_germs)) %>%
+  left_join(summarise(rd_adj12, mean = weighted.mean(days_of_incubation, mean_germs))) %>%
+  left_join(summarise(rd_adj12, n = n()))
+  
+t.test.equation <- function(x, s, n) {
+  return ((x[1]-x[2])/sqrt(s[1]^2/n[1] + s[2]^2/n[2]))
+} 
+
+# https://stats.stackexchange.com/questions/30394/how-to-perform-two-sample-t-tests-in-r-by-inputting-sample-statistics-rather-tha
+t.test2 <- function(m1,m2,s1,s2,n1,n2,m0=0,equal.variance=FALSE)
+{
+    if( equal.variance==FALSE ) 
+    {
+        se <- sqrt( (s1^2/n1) + (s2^2/n2) )
+        # welch-satterthwaite df
+        df <- ( (s1^2/n1 + s2^2/n2)^2 )/( (s1^2/n1)^2/(n1-1) + (s2^2/n2)^2/(n2-1) )
+    } else
+    {
+        # pooled standard deviation, scaled by the sample sizes
+        se <- sqrt( (1/n1 + 1/n2) * ((n1-1)*s1^2 + (n2-1)*s2^2)/(n1+n2-2) ) 
+        df <- n1+n2-2
+    }      
+    t <- (m1-m2-m0)/se 
+    dat <- c(m1-m2, se, t, 2*pt(-abs(t),df))    
+    names(dat) <- c("Difference of means", "Std Error", "t", "p-value")
+    return(dat) 
+}
+
+t.test.equation(germ_speed$mean, sqrt(germ_speed$var), germ_speed$n)
+
+t.test2(germ_speed$mean[1], germ_speed$mean[2], sqrt(germ_speed$var[1]), sqrt(germ_speed$var[2]), germ_speed$n[1], germ_speed$n[2])
+
+
+data28 <- data %>%
+  filter(color != "nuttalliae") %>%
+  filter(germinated_this_day > 0) %>%
+  mutate(germinated_this_day = as.integer(germinated_this_day),
+         treatment = as.integer(treatment),
+         population = factor(population),
+         color = factor(case_when(
+           color == "bl" ~ "black",
+           TRUE ~ "red"
+         )))
+
+# data28[967,]
+# 
+# 1:data28[[1,"germinated_this_day"]]
+
+
+# germ_speed_data <- data.frame( seed_id = -1, population = "NULL", color = "NULL", day_of_germination = -1)
+# for(i in 1:nrow(data28)) {
+#   for(j in 1:data28[[1,"germinated_this_day"]]){
+#     id = j + (data28[[i,"days_of_incubation"]]-1)*50 + ((data28[[i,"replicate"]]-1) + data28[[i,"treatment"]])*50*15
+#     pop = data28[[i,"population"]]
+#     col = ""
+#     day = 0
+#     data = tibble(seed_id = id, population = pop, color = col, day_of_germination = day)
+#     print(data)
+#     # add_row(germ_speed_data, seed_id = id, population = pop, color = col, day_of_germination = day)
+#   }
+# }
+# head(germ_speed_data)
+
+print("starting")
+germ_speed_data <- data.frame( seed_id = -1, population = "NULL", color = "NULL", day_of_germination = -1, treatment = -1)
+for(i in 1:nrow(data28)) {
+  cat("\014")
+  print(paste0(i,"/",nrow(data28)))
+  for(j in 1:data28[[i,"germinated_this_day"]]){
+    id = j + (data28[[i,"days_of_incubation"]]-1)*50 + ((data28[[i,"replicate"]]) + data28[[i,"treatment"]])*50*15 
+    pop = data28[[i,"population"]]
+    col = data28[[i,"color"]]
+    day = data28[[i,"days_of_incubation"]]
+    treat = data28[[i,"treatment"]]
+    germ_speed_data %<>% add_row(seed_id = id, population = pop, color = col, day_of_germination = day, treatment = treat)
+  }
+}
+germ_speed_data %<>% filter(seed_id >=0)
+# head(germ_speed_data)
+print("done")
+
+gamma_4a <- germ_speed_data %>%
+  filter(treatment > 0) %>%
+ggplot(aes(x = color, y = day_of_germination, color = color, fill = color)) +
+  geom_boxplot(color = outline_color, width = 1/2) +
+  # geom_jitter(width = 0.1) +
+  # geom_violin(color = outline_color) +
+  scale_y_continuous(breaks = c(2*0:7)) +
+  scale_fill_manual(values = fill_color3) +
+  xlab("seed morph") + ylab("days to germination") +
+  theme_Maddison2018_legend()
+gamma_4a
+
+gamma_4b <- germ_speed_data %>%
+  filter(treatment == 0) %>%
+ggplot(aes(x = color, y = day_of_germination, color = color, fill = color)) +
+  # geom_jitter(width = 0.1) +
+  geom_violin(trim = F, adjust = 1.5, color = NA) +
+  geom_boxplot(size = 2, width = 1/5, outlier.shape = "",  fill = NA) +
+  scale_y_continuous(breaks = c(2*0:7)) +
+  scale_fill_manual(values = fill_color4) +
+  scale_color_manual(values = line_color) +
+  xlab("seed morph") + ylab("days to germination") +
+  theme_Maddison2018_legend()
+gamma_4b
+
+
+# Red morphs germinate quicker than black morphs with no strat (t = 9.264, df = 318.94, p-value < 2.2e-16)
+germ_speed_data %>%
+  filter(treatment == 0) %>%
+t.test(day_of_germination ~ color, data = .)
+
+germ_speed_data %>%
+  filter(treatment == 0) %>%
+  group_by(color) %>%
+  summarise(zero_quantile = quantile(day_of_germination)[1],
+            first_quantile = quantile(day_of_germination)[2],
+            median = quantile(day_of_germination)[3],
+            third_quantile = quantile(day_of_germination)[4],
+            forth_quantile = quantile(day_of_germination)[5])
+  
+
+```
+
+
+##$\gamma$.2. Growth speed by seed morph without stratification
+Morphs grow a different rates (Adjusted R-squared:  0.1968, F-statistic: 33.11 on 3 and 390 DF,  p-value: < 2.2e-16)
+
+(adj r2: 0.197, f = 33.11, df = 3 and 390, p < 2.2e-16)
+
+
+```{r}
+
+#seed morphological data from the microscope bisections
+growthdata <- read_csv("/users/aperium/Dropbox/Projects/Chenopodium/Data/root growth/rootgrowth.csv") %>%
+  mutate(rootpace = root_length / day_after_planting,
+         shootpace = shoot_length / day_after_planting,
+         unique_seed_id = case_when(
+           color == "rd" ~ (sample - 1) * 50 + seed_number,
+           color == "bl" ~ 5 * 50 + (sample - 1) * 50 + seed_number,
+           TRUE ~ NaN
+         ),
+         color = factor(case_when(color == "rd" ~ "red", color == "bl" ~ "black", TRUE ~ color), levels = c( "nuttalliae", "red", "black" )))
+
+lm(formula = shootpace ~ color, data = growthdata) %>% summary()
+
+
+# growthdata %>%
+#   filter(day_after_planting == max(day_after_planting)) %>%
+# ggplot(., aes(x = color, y = shoot_length, fill = color)) +
+#   geom_boxplot() +
+#   scale_fill_manual(values = c("bl"="grey30", "rd"="firebrick3")) +
+#   theme_minimal()  
+
+# ggplot(growthdata, aes(x = day_after_planting, y = shoot_length, color = color)) +
+#   geom_point(size = 3) +
+#   scale_color_manual(values = c("bl"="grey30", "rd"="firebrick3")) +
+#   theme_minimal()
+
+#plot shoot growth
+rd_reg <- growthdata %>%
+  filter(color == "red") %>%
+  lm(formula = shoot_length ~ day_after_planting, data = .)
+bl_reg <- growthdata %>%
+  filter(color == "black") %>%
+  lm(formula = shoot_length ~ day_after_planting, data = .)
+# ggplot(growthdata, aes(x = day_after_planting, y = shoot_length, color = color)) +
+#   geom_jitter(size = 3, width = 0.05) +
+#   geom_segment(aes(x = min(growthdata %>% filter(color =="rd") %>% .$day_after_planting), y = min(rd_reg$fitted.values), xend = max(growthdata %>% filter(color =="rd") %>% .$day_after_planting), yend = max(rd_reg$fitted.values), color = "rd")) + 
+#   geom_segment(aes(x = 4, y = min(bl_reg$fitted.values), xend = max(growthdata %>% filter(color =="bl") %>% .$day_after_planting), yend = max(bl_reg$fitted.values), color = "bl")) +
+#   scale_color_manual(values = c("bl"="grey30", "rd"="firebrick3")) +
+#   theme_minimal()
+
+# #plot shoot growth
+# ggplot(growthdata, aes(x = day_after_planting, y = shoot_length, color = color, fill = color)) +
+#   geom_jitter(size = 3, width = 0.05) +
+#   geom_smooth(method = "lm", formula = y ~ x) +
+#   # geom_boxplot(data = growthdata %>% filter(day_after_planting==3), fill = NA, width = 3/16, aes(x = day_after_planting-3/32))+
+#   # geom_boxplot(data = growthdata %>% filter(day_after_planting==4), fill = NA, width = 3/8)+
+#   # geom_boxplot(data = growthdata %>% filter(day_after_planting==5), fill = NA, width = 3/8)+
+#   # geom_boxplot(data = growthdata %>% filter(day_after_planting==6), fill = NA, width = 3/8)+
+#   scale_color_manual(values = c("bl"="grey30", "rd"="firebrick3")) +
+#   scale_fill_manual(values = c("bl"="grey30", "rd"="firebrick3")) +
+#   theme_minimal()
+
+#plot shoot growth
+# gamma_3 <- ggplot(growthdata, aes(x = day_after_planting, y = shoot_length, color = color, fill = color)) +
+#   # geom_jitter(size = 3, width = 0.05) +
+#   geom_smooth(method = "lm", formula = y ~ x) +
+#   geom_boxplot(data = growthdata %>% filter(day_after_planting==3), fill = NA, width = 3/16, aes(x = day_after_planting-3/32), size = 2)+
+#   geom_boxplot(data = growthdata %>% filter(day_after_planting==4), fill = NA, width = 3/8, size = 2)+
+#   geom_boxplot(data = growthdata %>% filter(day_after_planting==5), fill = NA, width = 3/8, size = 2)+
+#   geom_boxplot(data = growthdata %>% filter(day_after_planting==6), fill = NA, width = 3/8, size = 2)+
+#   scale_color_manual(values = fill_color3) +
+#   scale_fill_manual(values = fill_color3) +
+#   theme_Maddison2018_legend()
+
+gamma_3 <- ggplot(growthdata, aes(x = day_after_planting, y = shoot_length, color = color, fill = color)) +
+  # geom_jitter(size = 3, width = 0.05) +
+  geom_smooth(method = "lm", formula = y ~ x) +
+  geom_boxplot(data = growthdata %>% filter(day_after_planting==3), fill = NA, width = 2/18, aes(x = day_after_planting-2/36), size = 2)+
+  geom_boxplot(data = growthdata %>% filter(day_after_planting==4), fill = NA, width = 2/9, size = 2)+
+  geom_boxplot(data = growthdata %>% filter(day_after_planting==5), fill = NA, width = 2/9, size = 2)+
+  geom_boxplot(data = growthdata %>% filter(day_after_planting==6), fill = NA, width = 2/9, size = 2)+
+  scale_color_manual(values = fill_color3) +
+  scale_fill_manual(values = fill_color3) +
+  xlab("days following planting") + ylab("shoot length") +
+  theme_Maddison2018_legend()
+
+gamma_3b <- ggplot(growthdata, aes(x = day_after_planting, y = shoot_length, color = color, fill = color)) +
+  # geom_jitter(size = 3, width = 0.05) +
+  geom_smooth(method = "lm", formula = y ~ x) +
+  geom_boxplot(data = growthdata %>% filter(day_after_planting==3), fill = NA, width = 3/18, aes(x = day_after_planting-3/32), size = 2)+
+  geom_boxplot(data = growthdata %>% filter(day_after_planting==4), fill = NA, width = 3/9, size = 2)+
+  geom_boxplot(data = growthdata %>% filter(day_after_planting==5), fill = NA, width = 3/9, size = 2)+
+  geom_boxplot(data = growthdata %>% filter(day_after_planting==6), fill = NA, width = 3/9, size = 2)+
+  scale_color_manual(values = line_color) +
+  scale_fill_manual(values = line_color) +
+  xlab("days following planting") + ylab("shoot length") +
+  theme_Maddison2018_legend()
+
+
+gamma_3c <- ggplot(growthdata, aes(x = day_after_planting, y = shoot_length, color = color, fill = color)) +
+  # geom_jitter(size = 3, width = 0.05) +
+  geom_smooth(method = "lm", formula = y ~ x) +
+  geom_violin(data = growthdata %>% filter(day_after_planting==3), trim = F, adjust = 1.5, color = NA, alpha = 0.5, scale = "width", width = 4/18, aes(x = day_after_planting-4/32), size = 2)+
+  geom_violin(data = growthdata %>% filter(day_after_planting==4), trim = F, adjust = 1.5, color = NA, alpha = 0.5, scale = "width", width = 4/9, size = 2)+
+  geom_violin(data = growthdata %>% filter(day_after_planting==5), trim = F, adjust = 1.5, color = NA, alpha = 0.5, scale = "width", width = 4/9, size = 2)+
+  geom_violin(data = growthdata %>% filter(day_after_planting==6), trim = F, adjust = 1.5, color = NA, alpha = 0.5, scale = "width", width = 4/9, size = 2)+
+  geom_boxplot(data = growthdata %>% filter(day_after_planting==3), fill = NA, width = 3/18, aes(x = day_after_planting-3/32), size = 2)+
+  geom_boxplot(data = growthdata %>% filter(day_after_planting==4), fill = NA, width = 3/9, size = 2)+
+  geom_boxplot(data = growthdata %>% filter(day_after_planting==5), fill = NA, width = 3/9, size = 2)+
+  geom_boxplot(data = growthdata %>% filter(day_after_planting==6), fill = NA, width = 3/9, size = 2)+
+  scale_color_manual(values = line_color) +
+  scale_fill_manual(values = line_color) +
+  xlab("days following planting") + ylab("shoot length") +
+  theme_Maddison2018_legend()
+
+
+
+  geom_violin(trim = F, adjust = 1.5, color = NA) +
+
+
+# #plot shoot growth
+# ggplot(growthdata, aes(x = day_after_planting, y = shoot_length, color = color, fill = color)) +
+#   # geom_jitter(size = 3, width = 0.05) +
+#   geom_smooth(method = "lm", formula = y ~ x) +
+#   geom_boxplot(data = growthdata %>% filter(day_after_planting==3), fill = NA, width = 3/16, aes(x = day_after_planting-3/32))+
+#   geom_boxplot(data = growthdata %>% filter(day_after_planting==4), fill = NA, width = 3/8)+
+#   geom_boxplot(data = growthdata %>% filter(day_after_planting==5), fill = NA, width = 3/8)+
+#   geom_boxplot(data = growthdata %>% filter(day_after_planting==6), fill = NA, width = 3/8)+
+#   scale_color_manual(values = c("bl"="grey30", "rd"="firebrick3")) +
+#   scale_fill_manual(values = c("bl"="grey30", "rd"="firebrick3")) +
+#   theme_minimal()
+
+t.test(shoot_length ~ color, data = growthdata %>%
+  filter(day_after_planting == max(day_after_planting)))
+  
+# mean and median shoot length on day 6
+growthdata %>%
+  filter(day_after_planting == max(day_after_planting)) %>%
+  group_by(color) %>%
+  summarise(median_shoot_length = median(shoot_length, na.rm = TRUE),
+            mean_shoot_length = mean(shoot_length, na.rm = TRUE))
+  
+growthdata %>%
+  filter(color == "red" || color == "black") %>%
+  lm(shoot_length ~ day_after_planting * color, data = .) %>% summary()
+
+#how do i run ttests for each day to see which days are not different WITH an correction for the increased error
+pvs <- tibble(day = NA, p = NA)
+for(i in 4:6) {
+    red <- filter(growthdata, day_after_planting == i & color == "red") %>% .$shoot_length
+    black <- filter(growthdata, day_after_planting == i & color == "black") %>% .$shoot_length
+    pvs %<>% full_join(tibble(day = i, p = t.test(red, black)$p.value))
+}
+pvs %<>% 
+  na.omit() %>%
+  mutate(padj = p.adjust(.$p))
+head(pvs)
+
+# slope and intercept for the seedling growth regression lines
+reglinestats <- tibble(color = NA, intercept = NA, slope = NA, rsq = NA, adjrsq = NA)
+for(i in unique(growthdata$color)) {
+  tmpmodel <- lm(shoot_length ~ day_after_planting, data = filter(growthdata, color == i))
+  tmpsummary <- summary(tmpmodel)
+  newtib <- tibble(color = i, 
+         intercept = tmpmodel$coefficients[[1]],
+         slope = tmpmodel$coefficients[[2]],
+         rsq = tmpsummary$r.squared,
+         adjrsq = tmpsummary$adj.r.squared)
+  # print(newtib)
+  ifelse(!is.na(reglinestats),
+     reglinestats %<>% full_join(newtib),
+     reglinestats <- newtib)
+}
+head(reglinestats)
+
+```
+
+
+```{r, eval = FALSE}
+#updated shoot growth speed to start from the day of germination rather than day of planting.
+
+age_of_seedling <- function(data = growthdata, seed_id = NULL, after_planting = NULL) {
+  germination_day <- data %>%
+    filter(unique_seed_id == seed_id) %>%
+    .$day_after_planting %>%
+    min()
+  after_planting - germination_day +1
+}
+
+germinated_when <- function(data = growthdata, seed_id = NULL) {
+  data %>%
+    filter(unique_seed_id == seed_id) %>%
+    .$day_after_planting %>%
+    min()
+}
+  
+
+growthdata2 <- growthdata %>%
+  group_by(unique_seed_id) %>%
+  mutate(
+    germination_day = germinated_when(seed_id = unique_seed_id),
+    seedling_age = age_of_seedling(seed_id = unique_seed_id, after_planting = day_after_planting)
+  ) %>% 
+  ungroup() %>%
+  filter(seedling_age <= 3)
+
+
+#plot shoot growth
+rd_reg <- growthdata2 %>%
+  filter(color == "red") %>%
+  lm(formula = shoot_length ~ seedling_age, data = .)
+bl_reg <- growthdata2 %>%
+  filter(color == "black") %>%
+  lm(formula = shoot_length ~ seedling_age, data = .)
+# ggplot(growthdata2, aes(x = seedling_age, y = shoot_length, color = color)) +
+#   geom_jitter(size = 3, width = 0.05) +
+#   geom_segment(aes(x = min(growthdata2 %>% filter(color =="rd") %>% .$seedling_age), y = min(rd_reg$fitted.values), xend = max(growthdata2 %>% filter(color =="rd") %>% .$seedling_age), yend = max(rd_reg$fitted.values), color = "rd")) +
+#   geom_segment(aes(x = min(growthdata2 %>% filter(color =="bl") %>% .$seedling_age), y = min(bl_reg$fitted.values), xend = max(growthdata2 %>% filter(color =="bl") %>% .$seedling_age), yend = max(bl_reg$fitted.values), color = "bl")) +
+#   scale_color_manual(values = c("bl"="grey30", "rd"="firebrick3")) +
+#   theme_minimal()
+
+
+#plot shoot growth
+ggplot(growthdata2, aes(x = seedling_age, y = shoot_length, color = color, fill = color)) +
+  geom_jitter(size = 3, width = 0.05) +
+  geom_smooth(method = "lm", formula = y ~ x) +
+  geom_boxplot(data = growthdata2 %>% filter(seedling_age==1), fill = NA, width = 3/8, outlier.shape = "")+
+  geom_boxplot(data = growthdata2 %>% filter(seedling_age==2), fill = NA, width = 3/8, outlier.shape = "")+
+  geom_boxplot(data = growthdata2 %>% filter(seedling_age==3), fill = NA, width = 3/8, outlier.shape = "")+
+  scale_color_manual(values = c("bl"="grey30", "rd"="firebrick3")) +
+  scale_fill_manual(values = c("bl"="grey30", "rd"="firebrick3")) +
+  theme_minimal()
+
+#plot shoot growth
+ggplot(growthdata2, aes(x = seedling_age, y = shoot_length, color = color, fill = color)) +
+  geom_jitter(size = 3, width = 0.05) +
+  geom_smooth(method = "lm", formula = y ~ x) +
+  # geom_boxplot(data = growthdata2 %>% filter(seedling_age==1), fill = NA, width = 3/8)+
+  # geom_boxplot(data = growthdata2 %>% filter(seedling_age==2), fill = NA, width = 3/8)+
+  # geom_boxplot(data = growthdata2 %>% filter(seedling_age==3), fill = NA, width = 3/8)+
+  scale_color_manual(values = c("bl"="grey30", "rd"="firebrick3")) +
+  scale_fill_manual(values = c("bl"="grey30", "rd"="firebrick3")) +
+  theme_minimal()
+
+#plot shoot growth
+ggplot(growthdata2, aes(x = seedling_age, y = shoot_length, color = color, fill = color)) +
+  # geom_jitter(size = 3, width = 0.05) +
+  geom_smooth(method = "lm", formula = y ~ x) +
+  geom_boxplot(data = growthdata2 %>% filter(seedling_age==1), fill = NA, width = 3/8)+
+  geom_boxplot(data = growthdata2 %>% filter(seedling_age==2), fill = NA, width = 3/8)+
+  geom_boxplot(data = growthdata2 %>% filter(seedling_age==3), fill = NA, width = 3/8)+
+  scale_color_manual(values = c("bl"="grey30", "rd"="firebrick3")) +
+  scale_fill_manual(values = c("bl"="grey30", "rd"="firebrick3")) +
+  theme_minimal()
+  
+lm(shoot_length ~ seedling_age * color, data = growthdata2) %>% summary()
+```
+
+```{r, eval = FALSE}
+
+
+gam(shoot_length ~ s(unique_seed_id) + seedling_age + color, data = growthdata2) %>% summary
+
+
+plot <- ggplot(growthdata2, aes(x = seedling_age, y = root_length, color = color, group = unique_seed_id)) +   
+  geom_point(shape = 19, stroke = 1) +
+  theme_minimal()
+plot %<>% + geom_smooth(method = lm, size = 1, se = FALSE)
+plot
+
+```
+
+```{r}
+ggpubr::ggarrange(gamma_4b, gamma_3b, common.legend = T, widths = c(2,5))
+```
+

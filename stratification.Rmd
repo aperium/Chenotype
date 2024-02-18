@@ -1,0 +1,606 @@
+---
+title: "Chenopodium Germination-Stratification by Color"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(magrittr)
+library(ggplot2)
+```
+
+```{r}
+data <- read_csv("/Users/aperium/Dropbox/Projects/Chenopodium/Data/Stratification/raw_strat_germ_data.csv") %>%
+  mutate( population = as.factor(population),
+          color      = as.factor(color),
+          germinated_this_day = ifelse(is.na(germinated_this_day),0,germinated_this_day),
+          rotten = ifelse(is.na(rotten),0,rotten),
+          malformed = ifelse(is.na(malformed),0,malformed),
+          date       = as.Date(date, format = "%d-%b-%y"),
+          treatment = if_else(treatment >= 9 & treatment < 10, 9, treatment)) #added to address the off by one day problem
+
+# we have a zeros problem
+# this will fill in all of the missing zeros.
+variables <- data.frame("population","color","replicate","treatment","days_of_incubation","germinated_this_day","rotten","malformed")
+populations = c("B3","B5","B8","B14","B17","B19","B25","B31","B33","B72","N3")
+colors = c("bl","lr","dr","nuttalliae")
+replicates = c(1:4)
+treatments = c(0,1,2,4,6,9,12)
+incubations_days = c(0:14)
+
+population_list <- c()
+color_list <- c()
+replicate_list <- c()
+treatment_list <- c()
+incubation_day_list <- c()
+for(i in 1:11) {
+  for(j in 1:4) {
+    if(!(i==2 & j==2) & ((i<11 & j<4) | (i==11 & j==4))) {
+      for(k in 1:4) {
+        if((i<11 & k==1) | i==11) {
+          for(l in 1:7) {
+            for(m in 1:15) {
+              #print(paste(populations[i],colors[j],replicates[k],treatments[l],incubations_days[m]))
+              population_list <- c(population_list,populations[i])
+              color_list <- c(color_list,colors[j])
+              replicate_list <- c(replicate_list,replicates[k])
+              treatment_list <- c(treatment_list,treatments[l])
+              incubation_day_list <- c(incubation_day_list,incubations_days[m])
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+blank_table <- tibble(
+  population = population_list,
+  color = color_list,
+  replicate = replicate_list,
+  treatment = treatment_list,
+  days_of_incubation = incubation_day_list
+)
+
+# add all those missing zeros
+data %<>% full_join(blank_table) %>%
+  filter(treatment <= 10) %>%
+  mutate(
+    germinated_this_day = if_else(!is.na(germinated_this_day),germinated_this_day,0,0),
+    rotten = if_else(!is.na(rotten),rotten,0,0),
+    malformed = if_else(!is.na(malformed),malformed,0,0)
+    ) %>%
+  #and cleaning up
+  filter(days_of_incubation >= 0)
+
+
+morphcounts <- read_csv("/users/aperium/Dropbox/Projects/Chenopodium/Data/Morphcounts/morphcounts.csv") %>%
+  # removing old data
+  filter(is.na(subpopulation) | (subpopulation != "apical" & subpopulation != "latteral")) %>%
+  filter(is.na(parental_population) | parental_population == "wild" | parental_population == "cultivated") %>%
+  # grouping rows based on population
+  group_by(population) %>% 
+  summarise_at(vars(light_red,dark_red,black),funs(sum)) %>%
+  # making new columns
+  ungroup() %<>% mutate(
+                red = light_red + dark_red,
+                total = light_red + dark_red + black,
+                red_proportion = red / total,
+                black_proportion = black / total,
+                light_red_proportion = light_red / total,
+                dark_red_proportion = dark_red / total
+                ) %>%
+  mutate(population = case_when(
+    population == "WestState3" ~ "B3",
+    population == "BentBrook1" ~ "B5",
+    population == "BentBrook4" ~ "B8",
+    population == "Sabrina4" ~ "B14",
+    population == "WayneHq2" ~ "B17",
+    population == "McArthur1" ~ "B19",
+    population == "EastUnion2" ~ "B25",
+    population == "Muncie3" ~ "B31",
+    population == "Buchtel1" ~ "B33",
+    population == "Athens0002" ~ "B72",
+    population == "CbbWayneHq1-17" ~ "N3",
+    TRUE ~ population
+  )) %>%
+  # organizing the data
+  gather(key = "color", value = "morphproportion",red_proportion:dark_red_proportion) %>%
+  select(population, color, morphproportion) %>%
+  mutate( color = case_when(
+    color == "red_proportion" ~ "rd",
+    color == "light_red_proportion" ~ "lr",
+    color == "dark_red_proportion" ~ "dr",
+    color == "black_proportion" ~ "bl",
+    TRUE ~ color
+  )) %>%
+  filter(   population == "B3" |
+            population == "B5" |
+            population == "B8" |
+            population == "B14" |
+            population == "B17" |
+            population == "B19" |
+            population == "B25" |
+            population == "B31" |
+            population == "B33" |
+            population == "B72" |
+            population == "N3"
+            ) %>%
+  mutate(
+    color = as.factor(color),
+    population = as.factor(population)
+  )
+```
+
+```{r}
+data %>%
+  filter(days_of_incubation >= 0) %>%
+  group_by(population, color, replicate, treatment) %>% summarise(germinated = sum(germinated_this_day)/50) %>%
+  ungroup() %>%
+  mutate(treatment = as.factor(treatment)) %>%
+ggplot(aes(x = treatment, y = germinated, fill = color)) +
+  geom_boxplot(position = "dodge") +
+  scale_fill_manual(values = c("grey40","darkred","orange","gold","red")) +
+  theme_minimal()
+```
+
+
+```{r}
+summarized <- summarise(group_by(filter(data, days_of_incubation <= 14), population, color, replicate, treatment), germinated = sum(germinated_this_day)/50) %>%
+  filter(population == "B3" | population == "B5" | population == "B8" | population == "B14" | population == "B17" | population == "B19" | population == "B72")
+summarise(group_by(summarized, color, treatment), germinated_m = mean(germinated)) %>%
+ggplot(aes(x = treatment, y = germinated_m, color = color)) +
+  geom_line() +
+  theme_minimal()
+```
+
+```{r}
+summary <- summarise(group_by(data, replicate, population, color, days_of_incubation, treatment), germinated = sum(germinated_this_day)/50)
+
+#summarise(group_by(summary, days_of_incubation, color), ymin = max(boxplot.stats(germinated)$conf[1],0))$ymin
+#summarise(group_by(summary, days_of_incubation, color), ymax = boxplot.stats(germinated)$conf[2],0)$ymax
+#summarise(group_by(summary, days_of_incubation, color), germinated = mean(germinated))$germinated
+
+summarise(group_by(summary, days_of_incubation, color), germinated = mean(germinated)) %>%
+  left_join(summarise(group_by(summary, days_of_incubation, color), ymin = max(boxplot.stats(germinated)$conf[1],0))) %>%
+  left_join(summarise(group_by(summary, days_of_incubation, color), ymax = boxplot.stats(germinated)$conf[2])) %>%
+  left_join(summarise(group_by(summary, days_of_incubation, color), median = boxplot.stats(germinated)$stats[3])) %>%
+  filter(color == "bl") %>%
+ggplot() +
+  geom_ribbon(aes(x = days_of_incubation, ymin = ymin, ymax = ymax)) +
+  geom_line(aes(x = days_of_incubation, y = median, color = color)) +
+  theme_minimal()
+
+
+summary %>%
+  # group_by(days_of_incubation, color, treatment) %>%
+  # summarize(germinated = mean(germinated)) %>%
+ggplot() +
+  facet_wrap(~treatment + population, nrow = 4) +
+  geom_line(aes(x = days_of_incubation, y = germinated, color = color)) +
+  scale_color_manual(values = c("grey20","red","gold","yellow")) +
+  theme_minimal()
+
+#red morphs are more likely to germinate during stratification or within 1-2 days of warm following stratification. This subjects them to increased risk of freezing. Blacks wait until days 3-4 to germinate.
+
+#used to identify and fix problem with B3- and B33-BL numbering in treatments 6 and 9.
+# summary %>%
+#   filter( population == "B3" | population == "B33") %>%
+#   filter( color == "bl") %>%
+#   ggplot() +
+#   facet_wrap(~treatment + population, nrow = 4) +
+#   geom_line(aes(x = days_of_incubation, y = germinated, color = color)) +
+#   scale_color_manual(values = c("grey20","red","gold","yellow")) +
+#   theme_minimal()
+```
+
+```{r}
+summary <- summarise(group_by(data, population, color, days_of_incubation), germinated = mean(germinated_this_day))
+
+summary %>%
+ggplot() +
+  facet_wrap(~population) +
+  geom_line(aes(x = days_of_incubation, y = germinated, color = color)) +
+  scale_color_manual(values = c("grey20","red","orange","yellow")) +
+  theme_minimal()
+
+# summary %>%
+#   group_by(color,days_of_incubation) %>%
+#   summarise(germinated = mean(germinated)) %>%
+#   mutate(days_of_incubation = as.factor(days_of_incubation)) %>%
+# ggplot() +
+#   geom_boxplot(aes(x = days_of_incubation, y = germinated, fill = color)) +
+#   scale_color_manual(values = c("grey20","red","orange","yellow")) +
+#   theme_minimal()
+
+## I think i need to model the germinations rates by day, then I can plot them against 
+
+```
+
+```{r}
+summary <- summarise(group_by(data, replicate, population, color, treatment), germinated = sum(germinated_this_day)/50)
+
+summarise(group_by(summary, population, treatment, color), germinated = mean(germinated)) %>%
+ggplot() +
+  facet_wrap(~population) +
+  geom_line(aes(x = treatment, y = germinated, color = color)) +
+  scale_color_manual(values = c("grey20","red","orange","yellow")) +
+  theme_minimal()
+
+
+```
+
+```{r}
+# combining lr and dr based on morph ratios
+summary <- summarise(group_by(data, replicate, population, color, treatment), germinated = sum(germinated_this_day)/50)
+summary <- summarise(group_by(summary, population, treatment, color), germinated = mean(germinated))
+
+# all three colors adjusted relative to morph ratio
+adjusted <- left_join(summary,morphcounts) %>%
+  mutate(adjusted_germination = germinated * morphproportion) %>%
+  select(-germinated,-morphproportion) %>%
+  spread(color,adjusted_germination) %>%
+  mutate(rd = lr + dr) %>%
+  select( -dr, -lr, -nuttalliae) %>%
+  gather(key = "color", value = "adjusted_germination",bl:rd) %>%
+  ungroup() %>%
+  mutate(
+    population = as.factor(population),
+    color = as.factor(color)
+  )
+
+# just lr and dr adjusted to a normalized value, to simulate tests with 50 "rd" seeds.
+just_rd_adjusted <- morphcounts %>%
+  spread(color,morphproportion) %>%
+  mutate(bl = 1,
+         dr = dr/rd,
+         lr = lr/rd) %>%
+  select(-rd) %>%
+  gather(key = color, value = morphproportion, bl:lr) %>%
+  left_join(summary,.) %>%
+  mutate(adjusted_germination = germinated * morphproportion) %>%
+  select(-germinated,-morphproportion) %>%
+  spread(color,adjusted_germination) %>%
+  mutate(rd = lr + dr) %>%
+  select( -dr, -lr) %>%
+  gather(key = "color", value = "adjusted_germination",bl:rd) %>%
+  ungroup() %>%
+  mutate(
+    population = as.factor(population),
+    color = as.factor(color)
+  ) %>%
+  filter(population != "N3",
+         color != "nuttalliae")
+
+just_rd_adjusted %>%
+ggplot() +
+  facet_wrap(~population) +
+  geom_line(aes(x = treatment, y = adjusted_germination, color = color)) +
+  scale_color_manual(values = c("grey20","red")) +
+  theme_minimal()
+
+summarize(group_by(just_rd_adjusted,treatment,color), adjusted_germination = mean(adjusted_germination, na.rm = TRUE)) %>%
+ggplot() +
+  #facet_wrap(~population) +
+  geom_line(aes(x = treatment, y = adjusted_germination, color = color)) +
+  scale_color_manual(values = c("grey20","red")) +
+  theme_minimal()
+
+```
+
+
+```{r}
+# combining lr and dr based on morph ratios
+# summary <- summarise(group_by(data, replicate, population, color, treatment), germinated = sum(germinated_this_day)/50)
+# summary <- summarise(group_by(summary, population, treatment, color), germinated = mean(germinated))
+
+summary <- data %>%
+  filter(days_of_incubation >= 0) %>%
+  group_by(population, color, treatment, days_of_incubation) %>%
+  summarize(germinated = mean(germinated_this_day)/50)
+
+# all three colors adjusted relative to morph ratio
+adjusted <- left_join(summary,morphcounts) %>%
+  mutate(adjusted_germination = germinated * morphproportion) %>%
+  select(-germinated,-morphproportion) %>%
+  spread(color,adjusted_germination) %>%
+  mutate(rd = lr + dr) %>%
+  select( -dr, -lr, -nuttalliae) %>%
+  gather(key = "color", value = "adjusted_germination",bl:rd) %>%
+  ungroup() %>%
+  mutate(
+    population = as.factor(population),
+    color = as.factor(color)
+  )
+
+# just lr and dr adjusted to a normalized value, to simulate tests with 50 "rd" seeds.
+just_rd_adjusted <- morphcounts %>%
+  spread(color,morphproportion) %>%
+  mutate(bl = 1,
+         dr = dr/rd,
+         lr = lr/rd) %>%
+  select(-rd) %>%
+  gather(key = color, value = morphproportion, bl:lr) %>%
+  left_join(summary,.) %>%
+  mutate(adjusted_germination = germinated * morphproportion) %>%
+  select(-germinated,-morphproportion) %>%
+  spread(color,adjusted_germination) %>%
+  mutate(rd = lr + dr) %>%
+  select( -dr, -lr) %>%
+  gather(key = "color", value = "adjusted_germination",bl:rd) %>%
+  ungroup() %>%
+  mutate(
+    population = as.factor(population),
+    color = as.factor(color)
+  ) %>%
+  filter(population != "N3",
+         color != "nuttalliae")
+
+just_rd_adjusted %>%
+  group_by(population,days_of_incubation,color) %>%
+  summarize(adjusted_germination = mean(adjusted_germination)) %>%
+ggplot() +
+  facet_wrap(~population) +
+  geom_line(aes(x = days_of_incubation, y = adjusted_germination, color = color)) +
+  scale_color_manual(values = c("grey20","red")) +
+  theme_minimal()
+
+summarize(group_by(just_rd_adjusted,treatment,color), adjusted_germination = mean(adjusted_germination, na.rm = TRUE)) %>%
+ggplot() +
+  #facet_wrap(~population) +
+  geom_line(aes(x = treatment, y = adjusted_germination, color = color)) +
+  scale_color_manual(values = c("grey20","red")) +
+  theme_minimal()
+
+# just_rd_adjusted %>%
+#   group_by(treatment,days_of_incubation,color) %>%
+#   summarize(adjusted_germination = mean(adjusted_germination)) %>%
+# ggplot() +
+#   facet_wrap(~treatment) +
+#   geom_boxplot(aes(x = color, y = adjusted_germination, color = color)) +
+#   scale_color_manual(values = c("grey20","red")) +
+#   theme_minimal()
+
+```
+
+```{r, eval = FALSE}
+summary <- data %>%
+  filter(days_of_incubation >= 0) %>%
+  group_by(population, color, treatment, days_of_incubation) %>%
+  summarize(germinated = mean(germinated_this_day)/50)
+
+# just lr and dr adjusted to a normalized value, to simulate tests with 50 "rd" seeds.
+just_rd_adjusted <- morphcounts %>%
+  spread(color,morphproportion) %>%
+  mutate(bl = 1,
+         dr = dr/rd,
+         lr = lr/rd) %>%
+  select(-rd) %>%
+  gather(key = color, value = morphproportion, bl:lr) %>%
+  left_join(summary,.) %>%
+  mutate(adjusted_germination = germinated * morphproportion) %>%
+  select(-germinated,-morphproportion) %>%
+  spread(color,adjusted_germination) %>%
+  mutate(rd = lr + dr) %>%
+  select( -dr, -lr) %>%
+  gather(key = "color", value = "adjusted_germination",bl:rd) %>%
+  ungroup() %>%
+  mutate(
+    population = as.factor(population),
+    color = as.factor(color)
+  ) %>%
+  filter(population != "N3",
+         color != "nuttalliae")
+
+# all three colors adjusted relative to morph ratio
+adjusted <- data %>%
+  mutate(germinated = germinated_this_day/50) %>%
+  left_join(morphcounts) %>%
+  mutate(adjusted_germination = germinated * morphproportion) %>%
+  select(-germinated,-morphproportion) %>%
+  spread(color,adjusted_germination) %>%
+  mutate(rd = lr + dr) %>%
+  select( -dr, -lr, -nuttalliae) %>%
+  gather(key = "color", value = "adjusted_germination",bl:rd) %>%
+  ungroup() %>%
+  mutate(
+    population = as.factor(population),
+    color = as.factor(color)
+  ) %>%
+  # total germination rate by population
+  group_by(population) %>% summarise(germination = sum(adjusted_germination))
+
+#I want to normalize the germination rates between populations
+rd_sum <- just_rd_adjusted %>%
+  group_by(population,treatment,color) %>% summarise(sum_germination = sum(adjusted_germination))
+rd_std <- just_rd_adjusted %>%
+  spread(days_of_incubation,adjusted_germination) %>%
+  right_join(rd_sum) %>%
+  mutate_at(4:18,  funs(if_else(. / sum_germination,. / sum_germination,.)) %>%
+  gather(days_of_incubation,adjusted_germination,4:18) %>%
+  select(-sum_germination)
+
+rd_std %>%
+  group_by(population,days_of_incubation,color) %>%
+  summarize(adjusted_germination = mean(adjusted_germination)) %>%
+ggplot() +
+  facet_wrap(~population) +
+  geom_line(aes(x = days_of_incubation, y = adjusted_germination, color = color)) +
+  scale_color_manual(values = c("grey20","red")) +
+  labs(title = "germination ratio by day") + 
+  theme_minimal()
+```
+
+
+```{r}
+data1 <- data %>%
+  filter(days_of_incubation >= 0) %>%
+  group_by(population, color, replicate, treatment) %>% summarise(germinated = sum(germinated_this_day)/50) %>%
+  ungroup() %>%
+  mutate(treatment = as.factor(treatment))
+
+# just lr and dr adjusted to a normalized value, to simulate tests with 50 "rd" seeds.
+just_rd_adjusted <- morphcounts %>%
+  spread(color,morphproportion) %>%
+  mutate(bl = 1,
+         dr = dr/rd,
+         lr = lr/rd) %>%
+  select(-rd) %>%
+  gather(key = color, value = morphproportion, bl:lr) %>%
+  left_join(data1,.) %>%
+  mutate(adjusted_germination = germinated * morphproportion) %>%
+  select(-germinated,-morphproportion) %>%
+  spread(color,adjusted_germination) %>%
+  mutate(rd = lr + dr) %>%
+  select( -dr, -lr) %>%
+  gather(key = "color", value = "adjusted_germination",bl:rd) %>%
+  ungroup() %>%
+  mutate(
+    population = as.factor(population),
+    color = as.factor(color)
+  ) %>%
+  filter(population != "N3",
+         color != "nuttalliae")
+
+max_germ_data <- data1 %>%
+  group_by(population,color) %>%
+  summarise(max_germ = max(germinated))
+
+data2 <- left_join(data1,max_germ_data) %>%
+  transmute(population, color, replicate, treatment, germ_adj = if_else(max_germ!=0,germinated/max_germ,NaN))
+
+# just lr and dr adjusted to a normalized value, to simulate tests with 50 "rd" seeds.
+rd_adj1 <- morphcounts %>%
+  spread(color,morphproportion) %>%
+  mutate(bl = 1,
+         dr = dr/rd,
+         lr = lr/rd) %>%
+  select(-rd) %>%
+  gather(key = color, value = morphproportion, bl:lr) %>%
+  add_row(population = "N3", color = "nuttalliae", morphproportion = 1) %>%
+  left_join(data2,.) %>%
+  mutate(adjusted_germination = germ_adj * morphproportion) %>%
+  select(-germ_adj,-morphproportion)
+
+nut_filter <- rd_adj1 %>%
+  filter(color == "nuttalliae")
+
+color_filter <- rd_adj1 %>%
+  filter(color != "nuttalliae") %>%
+  spread(color,adjusted_germination) %>%
+  mutate(rd = lr + dr) %>%
+  select( -dr, -lr) %>%
+  gather(key = "color", value = "adjusted_germination",bl:rd)
+
+rd_adj2 <- bind_rows(color_filter,nut_filter) %>%
+  ungroup() %>%
+  mutate(
+    population = as.factor(population),
+    color = as.factor(color)
+  ) %>%
+  filter(!is.na(adjusted_germination))
+
+rd_adj2 %>%
+ggplot(aes(x = treatment, y = adjusted_germination, fill = color)) +
+  geom_boxplot(position = "dodge") +
+  scale_fill_manual(values = c("grey40","gold","darkorange")) +
+  theme_minimal()
+
+rd_adj2 %>%
+ggplot(aes(x = treatment, y = adjusted_germination, color = color)) +
+  geom_jitter(width = 0.1) +
+  scale_color_manual(values = c("grey40","gold","firebrick3")) +
+  theme_minimal()
+
+rd_adj5 <- rd_adj2 %>%
+  mutate( treatment = as.numeric(levels(treatment)[treatment]))
+
+lm(adjusted_germination ~ treatment + color, data = rd_adj5) %>% summary()
+
+rd_adj5 %>%
+  filter(color == "rd" | color == "bl") %>%
+  lm(adjusted_germination ~ treatment * color, data = .) %>%
+  summary()
+
+nut_reg <- rd_adj5 %>%
+  filter(color == "nuttalliae") %>%
+  lm(formula = adjusted_germination ~ treatment, data = .)
+rd_reg <- rd_adj5 %>%
+  filter(color == "rd") %>%
+  lm(formula = adjusted_germination ~ treatment, data = .)
+bl_reg <- rd_adj5 %>%
+  filter(color == "bl") %>%
+  lm(formula = adjusted_germination ~ treatment, data = .)
+
+rd_adj5 %>%
+ggplot(aes(x = treatment, y = adjusted_germination, color = color)) +
+  geom_jitter(width = 0.1) +
+  geom_segment(aes(x = min(rd_adj5 %>% filter(color =="nuttalliae") %>% .$treatment), y = min(nut_reg$fitted.values), xend = max(rd_adj5 %>% filter(color =="nuttalliae") %>% .$treatment), yend = max(nut_reg$fitted.values), color = "nuttalliae")) +
+  geom_segment(aes(x = min(rd_adj5 %>% filter(color =="rd") %>% .$treatment), y = min(rd_reg$fitted.values), xend = max(rd_adj5 %>% filter(color =="rd") %>% .$treatment), yend = max(rd_reg$fitted.values), color = "rd")) +
+  scale_color_manual(values = c("bl"="grey30", "rd"="firebrick3", "nuttalliae" = "gold")) +
+  geom_segment(aes(x = min(rd_adj5 %>% filter(color =="bl") %>% .$treatment), y = min(bl_reg$fitted.values), xend = max(rd_adj5 %>% filter(color =="bl") %>% .$treatment), yend = max(bl_reg$fitted.values), color = "bl")) +
+  scale_color_manual(values = c("bl"="grey30", "rd"="firebrick3", "nuttalliae" = "gold")) +
+  scale_x_continuous(breaks = c(0,1,2,4,6,9)) +
+  theme_minimal()
+
+rd_adj2 %>%
+  group_by(color, treatment) %>%
+  summarise(adjusted_germination = mean(adjusted_germination)) %>%
+  mutate(treatment = as.integer(levels(treatment))[treatment]) %>%
+ggplot(aes(x = treatment, y = adjusted_germination, color = color)) +
+  geom_line() +
+  scale_color_manual(values = c("grey40","gold","darkorange")) +
+  theme_minimal()
+
+rd_adj2 %>%
+  mutate(treatment = as.integer(levels(treatment))[treatment]) %>%
+ggplot(aes(x = treatment, y = adjusted_germination, color = color, fill = color)) +
+  geom_smooth(method = "loess", span = 1) +
+  scale_color_manual(values = c("grey40","gold","red")) +
+  scale_fill_manual(values = c("grey40","gold","red")) +
+  theme_minimal()
+
+rd_adj2 %>%
+  mutate(treatment = as.integer(levels(treatment))[treatment]) %>%
+ggplot(aes(x = treatment, y = adjusted_germination, color = color, fill = color)) +
+  geom_point() +
+  scale_color_manual(values = c("grey40","gold","red")) +
+  scale_fill_manual(values = c("grey40","gold","red")) +
+  theme_minimal()
+
+summarise(group_by(rd_adj2, treatment, color), stat1 = boxplot.stats(adjusted_germination)$stats[1]) %>%
+  left_join(summarise(group_by(rd_adj2, treatment, color), stat2 = boxplot.stats(adjusted_germination)$stats[2])) %>%
+  left_join(summarise(group_by(rd_adj2, treatment, color), stat3 = boxplot.stats(adjusted_germination)$stats[3])) %>%
+  left_join(summarise(group_by(rd_adj2, treatment, color), stat4 = boxplot.stats(adjusted_germination)$stats[4])) %>%
+  left_join(summarise(group_by(rd_adj2, treatment, color), stat5 = boxplot.stats(adjusted_germination)$stats[5])) %>%
+  ungroup() %>%
+  mutate(treatment = as.integer(levels(treatment))[treatment]) %>%
+ggplot(aes(x = treatment, y = stat3, color = color, fill = color)) +
+  geom_ribbon(aes(ymin = stat2, ymax = stat4), alpha = 0.5, colour = NA) +
+  #geom_ribbon(aes(ymin = stat1, ymax = stat5), alpha = 0.1, colour = NA) +
+  geom_line(size = 2, lineend = "square", linejoin = "mitre") +
+  scale_color_manual(values = c("grey40","gold","red")) +
+  scale_fill_manual(values = c("grey40","gold","red")) +
+  theme_minimal()
+```
+
+```{r, eval = FALSE}
+data1 <- data %>%
+  filter(days_of_incubation >= 0) %>%
+  group_by(population, color, replicate, treatment) %>% summarise(germinated = sum(germinated_this_day)/50) %>%
+  ungroup() %>%
+  mutate(treatment = as.factor(treatment))
+
+max_germ_data <- data1 %>%
+  group_by(population,color) %>%
+  summarise(max_germ = max(germinated))
+
+data2 <- left_join(data1,max_germ_data) %>%
+  transmute(population, color, replicate, treatment, germ_adj = if_else(max_germ!=0,germinated/max_germ,NaN))
+
+data2 %>%
+ggplot(aes(x = treatment, y = germ_adj, fill = color)) +
+  geom_boxplot(position = "dodge") +
+  scale_fill_manual(values = c("grey40","darkred","orange","gold")) +
+  theme_minimal()
+```

@@ -1,0 +1,85 @@
+---
+title: "Chenopodium Freeze-Survival"
+author: "Daniel R Williams"
+date: "2/13/2018"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+
+library(knitr)
+knitr::opts_chunk$set(echo=FALSE, message = FALSE, warning = FALSE, results = 'markdown', tidy=TRUE, fig.asp=0.618, out.width="70%", fig.align="center")
+library(ggplot2)
+
+# For data manipulation
+library(tidyverse)
+library(magrittr)
+library(ggplot2)
+```
+
+## 1. 
+
+```{r, eval=TRUE, cache = FALSE, results = 'markdown'}
+freeze_samples <- read_csv("/users/aperium/Dropbox/Projects/Chenopodium/Data/Freeze-Survival/freezesurvivaldata.csv") %>%
+  mutate(population = as.factor(population), morph = as.factor(morph), replicate = as.factor(replicate))
+
+head(freeze_samples)
+
+
+
+
+
+```
+
+```{r}
+freeze_samples_reformatted <- freeze_samples %>% 
+  gather(key = "time_after_freeze", value = "afterfreeze_germinations", "24hr_afterfreeze":"312hr_afterfreeze") %>%
+  mutate(days_after_freeze_int = as.integer(substr(time_after_freeze,1,nchar(time_after_freeze)-14))/24)
+
+freeze_samples_reformatted_1 <- freeze_samples_reformatted %>%
+  group_by(morph, days_after_freeze_int) %>%
+  summarise_at(vars(afterfreeze_germinations), sum, na.rm = TRUE)
+  
+ggplot(freeze_samples_reformatted_1, aes(x = days_after_freeze_int, y = afterfreeze_germinations, fill = NA, color = morph)) +
+  geom_line(position = "identity") +
+  scale_fill_manual(values = c("grey40","red","orange","gold")) +
+  scale_color_manual(values = c("grey20","darkred","darkorange","orange")) +
+  theme_classic()
+  
+freeze_samples_reformatted_2 <- freeze_samples_reformatted %>%
+  group_by(population, morph, days_after_freeze_int, total_germinated) %>%
+  summarise_at(vars(afterfreeze_germinations), sum, na.rm = TRUE)
+
+ggplot(freeze_samples_reformatted_2, aes(x = population, y = total_germinated, fill = morph, color = morph)) +
+  geom_boxplot() +
+  scale_fill_manual(values = c("grey40","red","orange","gold")) +
+  scale_color_manual(values = c("grey20","darkred","darkorange","orange")) +
+  theme_classic()
+
+freeze_samples_reformatted_3 <- freeze_samples_reformatted %>%
+  mutate(treatment = as.factor(treatment)) %>%
+  group_by(morph, days_after_freeze_int, total_germinated, treatment) %>%
+  summarise_at(vars(afterfreeze_germinations), sum, na.rm = TRUE)
+
+ggplot(freeze_samples_reformatted_3, aes(x = treatment, y = total_germinated, fill = morph, color = morph)) +
+  geom_boxplot() +
+  scale_fill_manual(values = c("grey40","red","orange","gold")) +
+  scale_color_manual(values = c("grey20","darkred","darkorange","orange")) +
+  theme_classic()
+
+##TODO need to show what the best pre-stratification incubation time is (12 or 24 hours?)
+
+
+freeze_samples_reformatted %>%
+  group_by(treatment) %>%
+  summarise_at(vars(total_afterfreeze), mean, na.rm = TRUE) %>%
+  ggplot(aes(x = treatment, y = total_afterfreeze)) +
+    geom_boxplot() +
+    scale_fill_manual(values = c("grey40","red","orange","gold")) +
+    scale_color_manual(values = c("grey20","darkred","darkorange","orange")) +
+    theme_classic()
+
+```
+

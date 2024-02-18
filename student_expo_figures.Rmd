@@ -1,0 +1,1101 @@
+---
+title: "Student Expo 2018 Figures"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+#load libraries
+library(tidyverse)
+library(magrittr)
+library(ggplot2)
+
+library(knitr)
+#fig.asp=0.618
+knitr::opts_chunk$set(echo=FALSE, message = FALSE, warning = FALSE, results = 'markdown', tidy=TRUE, fig.asp=0.618)
+
+library(hrbrthemes)
+
+```
+
+```{r themes}
+
+theme_expo2018  <- function( ... ) {
+  theme_minimal() +
+  theme_ipsum_rc(grid = FALSE, base_size = 11.5 * 3, axis_title_size = 11.5 * 4, axis_title_face = "bold", axis_title_just = "mc") +
+  theme(...)
+}
+
+theme_expo2018_legend <- function (...) {
+  theme_expo2018(legend.text = element_text(size = 11.5 * 2, hjust=1, vjust=0.5), legend.title=element_text(face = "bold",size = 11.5 * 2.5), legend.key.height = unit(1.75, "char")) +
+    theme(...)
+}
+
+# fill_color <- c("goldenrod1","red3","grey50")
+fill_color <- c("goldenrod1","firebrick1","grey55")
+line_color <- "grey25"
+
+fill_color_2 <- c(fill_color[1:2],rgb( colorRamp(c(fill_color[3], line_color))(seq(0, 1, length = 3)), max = 255)[2])
+
+```
+
+
+```{r read_data}
+# get the germination data
+data <- read_csv("/Users/aperium/Dropbox/Projects/Chenopodium/Data/Stratification/raw_strat_germ_data.csv") %>%
+  mutate( population = as.factor(population),
+          color      = as.factor(color),
+          germinated_this_day = ifelse(is.na(germinated_this_day),0,germinated_this_day),
+          rotten = ifelse(is.na(rotten),0,rotten),
+          malformed = ifelse(is.na(malformed),0,malformed),
+          date       = as.Date(date, format = "%d-%b-%y"),
+          treatment = if_else(treatment >= 9 & treatment < 10, 9, treatment)) #added to address the off by one day
+
+# we have a zeros problem in the germination data
+# this will fill in all of the missing zeros.
+variables <- data.frame("population","color","replicate","treatment","days_of_incubation","germinated_this_day","rotten","malformed")
+populations = c("B3","B5","B8","B14","B17","B19","B25","B31","B33","B72","N3")
+colors = c("bl","lr","dr","nuttalliae")
+replicates = c(1:4)
+treatments = c(0,1,2,4,6,9,12)
+incubations_days = c(0:14)
+#
+population_list <- c()
+color_list <- c()
+replicate_list <- c()
+treatment_list <- c()
+incubation_day_list <- c()
+for(i in 1:11) {
+  for(j in 1:4) {
+    if(!(i==2 & j==2) & ((i<11 & j<4) | (i==11 & j==4))) {
+      for(k in 1:4) {
+        if((i<11 & k==1) | i==11) {
+          for(l in 1:7) {
+            for(m in 1:15) {
+              #print(paste(populations[i],colors[j],replicates[k],treatments[l],incubations_days[m]))
+              population_list <- c(population_list,populations[i])
+              color_list <- c(color_list,colors[j])
+              replicate_list <- c(replicate_list,replicates[k])
+              treatment_list <- c(treatment_list,treatments[l])
+              incubation_day_list <- c(incubation_day_list,incubations_days[m])
+            }
+          }
+        }
+      }
+    }
+  }
+}
+#
+blank_table <- tibble(
+  population = population_list,
+  color = color_list,
+  replicate = replicate_list,
+  treatment = treatment_list,
+  days_of_incubation = incubation_day_list
+)
+#
+# add all those missing zeros
+data %<>% full_join(blank_table) %>%
+  filter(treatment <= 10) %>%
+  mutate(
+    germinated_this_day = if_else(!is.na(germinated_this_day),germinated_this_day,0,0),
+    rotten = if_else(!is.na(rotten),rotten,0,0),
+    malformed = if_else(!is.na(malformed),malformed,0,0)
+    ) %>%
+  #and cleaning up
+  filter(days_of_incubation >= 0)
+
+#get the morph ratio data and format the data for adjusting germination data
+morphcounts <- read_csv("/users/aperium/Dropbox/Projects/Chenopodium/Data/Morphcounts/morphcounts.csv") %>%
+  # removing old data
+  filter(is.na(subpopulation) | (subpopulation != "apical" & subpopulation != "latteral")) %>%
+  filter(is.na(parental_population) | parental_population == "wild" | parental_population == "cultivated") %>%
+  # grouping rows based on population
+  group_by(population) %>% 
+  summarise_at(vars(light_red,dark_red,black),funs(sum)) %>%
+  # making new columns
+  ungroup() %<>% mutate(
+                red = light_red + dark_red,
+                total = light_red + dark_red + black,
+                red_proportion = red / total,
+                black_proportion = black / total,
+                light_red_proportion = light_red / total,
+                dark_red_proportion = dark_red / total
+                ) %>%
+  mutate(population = case_when(
+    population == "WestState3" ~ "B3",
+    population == "BentBrook1" ~ "B5",
+    population == "BentBrook4" ~ "B8",
+    population == "Sabrina4" ~ "B14",
+    population == "WayneHq2" ~ "B17",
+    population == "McArthur1" ~ "B19",
+    population == "EastUnion2" ~ "B25",
+    population == "Muncie3" ~ "B31",
+    population == "Buchtel1" ~ "B33",
+    population == "Athens0002" ~ "B72",
+    population == "CbbWayneHq1-17" ~ "N3",
+    TRUE ~ population
+  )) %>%
+  # organizing the data
+  gather(key = "color", value = "morphproportion",red_proportion:dark_red_proportion) %>%
+  select(population, color, morphproportion) %>%
+  mutate( color = case_when(
+    color == "red_proportion" ~ "rd",
+    color == "light_red_proportion" ~ "lr",
+    color == "dark_red_proportion" ~ "dr",
+    color == "black_proportion" ~ "bl",
+    TRUE ~ color
+  )) %>%
+  filter(   population == "B3" |
+            population == "B5" |
+            population == "B8" |
+            population == "B14" |
+            population == "B17" |
+            population == "B19" |
+            population == "B25" |
+            population == "B31" |
+            population == "B33" |
+            population == "B72" |
+            population == "N3"
+            ) %>%
+  mutate(
+    color = as.factor(color),
+    population = as.factor(population)
+  )
+
+#seed morphological data from the microscope bisections
+seeds <- read_csv("/users/aperium/Dropbox/Projects/Chenopodium/Data/Bisected seeds/bisectedseeds.csv") %>% filter(!is.na(population)) %>%
+  mutate(binary_color_bin = if_else(color_bin == "black","black","red")) %>%
+  mutate(
+    outer_epiderm_mean = rowMeans(.[grep("outer_epiderm", names(.))], na.rm = TRUE),
+    inner_epiderm_mean = rowMeans(.[grep("inner_epiderm", names(.))], na.rm = TRUE)
+    # pericarp_mean = rowSums(.[grep("pericarp", names(.))]/4, na.rm = FALSE)
+  ) %>% 
+  mutate( combined_epiderm_mean = rowSums(.[grep("epiderm_mean", names(.))], na.rm = TRUE)) %>%
+  mutate(
+    outer_epiderm_mean = ifelse(outer_epiderm_mean != 0, outer_epiderm_mean, NA),
+    inner_epiderm_mean = ifelse(inner_epiderm_mean != 0, inner_epiderm_mean, NA),
+    combined_epiderm_mean = ifelse(combined_epiderm_mean != 0, combined_epiderm_mean, NA)
+  ) %>%
+  # seed volume in cubic mm
+  mutate(volume = 4.0 / 3 * 3.141592653589 * length/2 * width/2 * height/2 / 1000^3) %>%
+  mutate( 
+    log_combined_epiderm_mean = log(combined_epiderm_mean),
+    log_volume = log(volume)
+  )
+
+# seed morph ratios data
+samples <- read_csv("/users/aperium/Dropbox/Projects/Chenopodium/Data/Morphcounts/morphcounts.csv") %>%
+  # removing old data
+  filter(is.na(subpopulation) | (subpopulation != "apical" & subpopulation != "latteral")) %>%
+  filter(is.na(parental_population) | parental_population == "wild" | parental_population == "cultivated") %>%
+  # grouping rows based on population
+  group_by(population) %>% 
+  summarise_at(vars(light_red,dark_red,black),funs(sum)) %>% 
+  ungroup() %>%
+  mutate(
+    red = light_red + dark_red,
+    total = light_red + dark_red + black,
+    red_proportion = red / total,
+    black_proportion = black / total,
+    light_red_proportion = light_red / total,
+    dark_red_proportion = dark_red / total
+    ) %>%
+  arrange(red_proportion) %>% ungroup() %>%
+  mutate(population = case_when(
+    population == "WestState3" ~ "B3",
+    population == "BentBrook1" ~ "B5",
+    population == "BentBrook4" ~ "B8",
+    population == "Sabrina4" ~ "B14",
+    population == "WayneHq2" ~ "B17",
+    population == "McArthur1" ~ "B19",
+    population == "EastUnion2" ~ "B25",
+    population == "Muncie3" ~ "B31",
+    population == "Buchtel1" ~ "B33",
+    population == "Athens0002" ~ "B72",
+    population == "CbbWayneHq1-17" ~ "N3",
+    TRUE ~ population
+  )) %>%
+  filter(   population == "B3" |
+            population == "B5" |
+            population == "B8" |
+            population == "B14" |
+            population == "B17" |
+            population == "B19" |
+            population == "B25" |
+            population == "B31" |
+            population == "B33" |
+            population == "B72" |
+            population == "N3"
+            ) %>%
+  mutate(
+    population = as.factor(population)
+  )
+
+```
+
+```{r fig1}
+# Testa thickness, seed volume, and germination speed by seed morph (red, black, domesticated)
+
+seeds2 <- seeds %>% 
+  mutate(seed_category = ifelse(species == "berlandieri", ifelse(population == "Athens0001", population, binary_color_bin), species)) %>%  
+  mutate(seed_category = factor(seed_category, levels = unique(seed_category[order(case_when(
+    seed_category == "quinoa"     ~ 1,
+    seed_category == "nuttalliae" ~ 2,
+    seed_category == "red"        ~ 3,
+    seed_category == "black"      ~ 4,
+    seed_category == "Athens0001" ~ 5
+  ))]))) %>%
+  filter(maturity == "mature") %>%
+  #filter for only red, black, and nuttalliae
+  filter(seed_category == "red" | seed_category == "black" | seed_category == "nuttalliae")
+
+
+#volume
+a <- ggplot(seeds2, aes(x = seed_category, y = volume)) +
+  stat_boxplot(coef = 1.5, size = 1.5, outlier.shape = 1, outlier.size = 1.5, outlier.stroke = 2, outlier.color = line_color, outlier.fill = fill_color, fill = fill_color, colour = line_color, geom ='errorbar', width = .75/2) +
+  geom_boxplot(size = 1.5, outlier.shape = 1, outlier.size = 1.5, outlier.stroke = 2, outlier.color = line_color, outlier.fill = fill_color, fill = fill_color, colour = line_color, width = 0.75) +
+  xlab("seed morph") + ylab("seed volume (mm^3)") +
+  theme_expo2018() +
+  scale_y_continuous(limits = c(0,1.5), breaks = c(0,0.5*1:3)) +
+  scale_x_discrete(expand = c(0.05, 0.05))
+
+#seed viability by germination
+max_germ_data <- data %>%
+  filter(days_of_incubation >= 0) %>%
+  group_by(population, color, replicate, treatment) %>% summarise(germinated = sum(germinated_this_day)/50) %>%
+  ungroup() %>%
+  mutate(treatment = as.factor(treatment)) %>%
+  #adjust germination to remove "non-viable" seeds
+  group_by(population,color) %>%
+  summarise(max_germ = max(germinated)) %>%
+  filter(color != "nuttalliae") %>%
+  spread(key = color, value = max_germ) %>%
+  ungroup() %>%
+  transmute(population,
+            lr_max_germ = lr,
+            dr_max_germ = dr,
+            bl_max_germ = bl)
+
+germ_prop_data <- morphcounts %>%
+  spread(color,morphproportion) %>%
+  transmute(population,
+            bl_prop = 1,
+            dr_prop = dr/rd,
+            lr_prop = lr/rd) %>%
+  left_join(max_germ_data,.) %>%
+  transmute(population,
+            red = lr_max_germ * lr_prop + dr_max_germ * dr_prop,
+            black = bl_max_germ * bl_prop) %>%
+  gather(color, prop_viable, red, black)
+
+max_nutt_data <- data %>%
+  filter(days_of_incubation >= 0) %>%
+  group_by(population, color, replicate, treatment) %>% summarise(germinated = sum(germinated_this_day)/50) %>%
+  ungroup() %>%
+  mutate(treatment = as.factor(treatment)) %>%
+  #adjust germination to remove "non-viable" seeds
+  group_by(population,color, replicate) %>%
+  summarise(max_germ = max(germinated)) %>%
+  filter(color == "nuttalliae") %>%
+  ungroup() %>%
+  transmute(population, color, prop_viable = max_germ)
+
+b <- bind_rows(germ_prop_data,max_nutt_data) %>%
+  mutate( color = factor(color, levels = c("nuttalliae", "red", "black"))) %>%
+ggplot(aes(x = color, y = prop_viable)) +
+  stat_boxplot(coef = 1.5, size = 1.5, outlier.shape = 1, outlier.size = 1.5, outlier.stroke = 2, outlier.color = line_color, outlier.fill = fill_color, fill = fill_color, colour = line_color, geom ='errorbar', width = .75/2) +
+  # geom_boxplot(size = 1.5, outlier.shape = 1, outlier.size = 1.5, outlier.stroke = 2, outlier.color = line_color, outlier.fill = fill_color, fill = fill_color, colour = line_color, width = 0.75) +
+  geom_boxplot(size = 1.5, outlier.shape = 1, outlier.size = 1.5, outlier.stroke = 2, outlier.color = line_color, fill = fill_color, colour = line_color, width = 0.75) +
+  xlab("seed morph") + ylab("seed viability") +
+  theme_expo2018() +
+  scale_y_continuous(limits = c(0,1), breaks = c(0,0.25*1:4)) +
+  scale_x_discrete(expand = c(0.05, 0.05))
+
+#testa
+c <- ggplot(seeds2, aes(x = seed_category, y = combined_epiderm_mean)) +
+  stat_boxplot(coef = 1.5, size = 1.5, outlier.shape = 1, outlier.size = 1.5, outlier.stroke = 2, outlier.color = line_color, outlier.fill = fill_color, fill = fill_color, colour = line_color, geom ='errorbar', width = .75/2) +
+  geom_boxplot(size = 1.5, outlier.shape = 1, outlier.size = 1.5, outlier.stroke = 2, outlier.color = line_color, outlier.fill = fill_color, fill = fill_color, colour = line_color, width = 0.75) +
+  xlab("seed morph") + ylab("testa thickness (µm)") +
+  theme_expo2018() +
+  scale_y_continuous(limits = c(0,50), breaks = c(0,10*1:5)) +
+  scale_x_discrete(expand = c(0.05, 0.05))
+
+
+
+##  FIG1c FOR SEED GERMINATION SPEED BY COLOR
+data1 <- data %>%
+  filter(days_of_incubation >= 0)
+# just lr and dr adjusted to a normalized value, to simulate tests with 50 "rd" seeds.
+rd_adj1 <- morphcounts %>%
+  spread(color,morphproportion) %>%
+  mutate(bl = 1,
+         dr = dr/rd,
+         lr = lr/rd) %>%
+  select(-rd) %>%
+  gather(key = color, value = morphproportion, bl:lr) %>%
+  add_row(population = "N3", color = "nuttalliae", morphproportion = 1) %>%
+  left_join(data1,.) %>%
+  mutate(germinated_this_day_adj = germinated_this_day * morphproportion) %>%
+  select(-germinated_this_day,-morphproportion) %>%
+  select(-rotten, -malformed, -date, -notes)
+nut_filter <- rd_adj1 %>%
+  filter(color == "nuttalliae")
+color_filter <- rd_adj1 %>%
+  filter(color != "nuttalliae") %>%
+  spread(color,germinated_this_day_adj) %>%
+  mutate(rd = lr + dr) %>%
+  select( -dr, -lr) %>%
+  gather(key = "color", value = "germinated_this_day_adj",bl:rd)
+rd_adj2 <- bind_rows(color_filter,nut_filter) %>%
+  ungroup() %>%
+  mutate(
+    population = as.factor(population),
+    color = as.factor(color)
+  ) %>%
+  filter(!is.na(germinated_this_day_adj))
+#adjust germination to remove "non-viable" seeds
+max_germ_data <- rd_adj2 %>%
+  group_by(population,color) %>%
+  summarise(max_germ = max(germinated_this_day_adj))
+rd_adj3 <- left_join(rd_adj2,max_germ_data) %>%
+  mutate(germinated_this_day_adj = if_else(max_germ!=0,germinated_this_day_adj/max_germ,0)) %>%
+  #filter(germinated_this_day_adj > 0) %>%
+  select(-max_germ)
+
+
+
+# rd_adj3 %>%
+#   group_by(color, days_of_incubation) %>%
+#   summarise(mean_germs = mean(germinated_this_day_adj)) %>%
+# ggplot(aes(fill = color, color = color)) +
+#   stat_ecdf(aes(y = days_of_incubation, x = mean_germs), geom = "line") +
+#   scale_fill_manual(values = c("grey50","gold","red")) +
+#   scale_color_manual(values = c("grey50","gold","red")) +
+#   theme_minimal()
+
+#on average, how long does it take a seed to germinate?
+rd_adj4 <- rd_adj3 %>%
+  #the nuttalliae germinated too much in the stratification to make sense of anything
+  filter(treatment <= 1 | color != "nuttalliae") %>% 
+  group_by(color, days_of_incubation) %>%
+  summarise(mean_germs = mean(germinated_this_day_adj)) %>%
+  mutate(days_of_incubation = as.double(days_of_incubation)) %>%
+  group_by(color)
+
+# spatstat::weighted.quantile(filter(rd_adj4, color == "nuttalliae")$days_of_incubation, filter(rd_adj4, color == "nuttalliae")$mean_germs, probs = seq(0,1,0.25))
+  
+d <- summarise(rd_adj4, stat1 = spatstat::weighted.quantile(days_of_incubation, mean_germs)[1]) %>%
+  left_join(summarise(rd_adj4, stat2 = spatstat::weighted.quantile(days_of_incubation, mean_germs)[2])) %>%
+  left_join(summarise(rd_adj4, stat3 = spatstat::weighted.quantile(days_of_incubation, mean_germs)[3])) %>%
+  left_join(summarise(rd_adj4, stat4 = spatstat::weighted.quantile(days_of_incubation, mean_germs)[4])) %>%
+  left_join(summarise(rd_adj4, stat5 = spatstat::weighted.quantile(days_of_incubation, mean_germs)[5])) %>%
+  mutate(stat1b = (1.5 * ( 2 * stat2 - stat4)),
+         stat5b = (1.5 * ( 2 * stat4 - stat2))) %>%
+  mutate(stat1 = if_else(stat1>stat1b,stat1,stat1b), 
+         stat5 = if_else(stat5<stat5b,stat5,stat5b)) %>%
+  mutate(color = as.character(color)) %>%
+  mutate(color = case_when(
+    color == "bl" ~ "black",
+    color == "rd" ~ "red",
+    TRUE ~ color
+  )) %>%
+  mutate( color = factor(color, levels = c("nuttalliae", "red", "black"))) %>%
+ggplot(aes(x = color)) + 
+  geom_errorbar(aes(ymin = stat1, ymax = stat5, width = .75/2), size = 1.5, color = line_color) +
+  geom_rect(aes(fill = color, ymin = stat2, ymax = stat4, xmin = as.numeric(color) - .75/2, xmax = as.numeric(color) + .75/2), color = line_color, size = 2) +
+  geom_segment((aes(y = stat3, yend = stat3, x = as.numeric(color) - .75/2, xend = as.numeric(color) + .75/2)), color = line_color, size = 3) +
+  geom_point(aes(y = 4, x = "nuttalliae"), color = line_color, size = 1.5, shape = 1, stroke = 2) +
+  geom_point(aes(y = 14, x = "red"), color = line_color, size = 1.5, shape = 1, stroke = 2) +
+  scale_color_manual(values = fill_color, guide = F) +
+  scale_fill_manual(values = fill_color, guide = F) +
+  xlab("seed morph") + ylab("days to germiation") +
+  theme_expo2018() +
+  scale_y_continuous(limits = c(0,14), breaks = c(0,4*1:3)) +
+  scale_x_discrete(expand = c(0.05, 0.05))
+
+# a
+# b
+# c
+# d
+
+a_minus <- a +
+  theme(axis.text.x = element_blank(), axis.title.x = element_blank())
+b_minus <- b +
+  theme(axis.text.x = element_blank(), axis.title.x = element_blank())
+c_minus <- c +
+  theme(axis.text.x = element_blank(), axis.title.x = element_blank())
+d_minus <- d +
+  theme(axis.text.x = element_blank(), axis.title.x = element_blank())
+
+a_plus <- a +
+  theme(axis.title.x = element_blank())
+b_plus <- b +
+  theme(axis.title.x = element_blank())
+c_plus <- c +
+  theme(axis.title.x = element_blank())
+d_plus <- d +
+  theme(axis.title.x = element_blank())
+
+# ggpubr::ggarrange(a_plus,c_plus,b,d)
+
+# ggpubr::ggarrange(c_plus,d_plus,a_plus,b,nrow=4)
+# 
+# 
+# ggpubr::ggarrange(c_plus,d_plus,b)
+# 
+# ggpubr::ggarrange(ggplot() + theme_expo2018(),b_plus,c,d)
+
+
+# ggpubr::ggarrange(a_plus,b_plus,c,d)
+
+```
+
+
+```{r experimental, eval = FALSE}
+
+#this shows what I want, but I'd like it structured as a boxplot
+rd_adj3 %>%
+  group_by(color, days_of_incubation) %>%
+  summarise(germinated_this_day_adj = mean(germinated_this_day_adj)) %>%
+ggplot(aes(fill = color, color = color)) +
+  #geom_violin(aes(x = color, y = days_of_incubation)) +
+  #geom_boxplot(aes(x = color, y = days_of_incubation)) +
+  #geom_point(aes(x = color, y = days_of_incubation)) +
+  #geom_density(aes(fill = germinated_this_day_adj, x = days_of_incubation)) +
+  geom_line(aes(x = days_of_incubation, y = germinated_this_day_adj)) +
+  scale_fill_manual(values = c("grey50","gold","red")) +
+  scale_color_manual(values = c("grey50","gold","red")) +
+  theme_minimal()
+
+# box_fun <- function(d) {
+#   summarise(d, ymin = spatstat::weighted.quantile(days_of_incubation, mean_germs)[1]) %>%
+#   left_join(summarise(d, lower = spatstat::weighted.quantile(days_of_incubation, mean_germs)[2])) %>%
+#   left_join(summarise(d, middle = spatstat::weighted.quantile(days_of_incubation, mean_germs)[3])) %>%
+#   left_join(summarise(d, upper = spatstat::weighted.quantile(days_of_incubation, mean_germs)[4])) %>%
+#   left_join(summarise(d, ymax = spatstat::weighted.quantile(days_of_incubation, mean_germs)[5])) %>%
+#   return()
+# }
+# 
+# box_fun2 <- function(d) {
+#   x = as.double(strsplit(d, ";")[1])
+#   w = as.double(strsplit(d, ";")[2])
+#   return(spatstat::weighted.quantile(x, w))
+# }
+# 
+# box_fun3 <- function(d) {
+#   d %<>% as.tibble()
+#   summarise(d, ymin = spatstat::weighted.quantile(as.double(strsplit(value, ";")[[1]]), as.double(strsplit(value, ";")[[2]]))[1]) %>%
+#   left_join(summarise(d, lower = spatstat::weighted.quantile(as.double(strsplit(value, ";")[[1]]), as.double(strsplit(value, ";")[[2]]))[2])) %>%
+#   left_join(summarise(d, middle = spatstat::weighted.quantile(as.double(strsplit(value, ";")[[1]]), as.double(strsplit(value, ";")[[2]]))[3])) %>%
+#   left_join(summarise(d, upper = spatstat::weighted.quantile(as.double(strsplit(value, ";")[[1]]), as.double(strsplit(value, ";")[[2]]))[4])) %>%
+#   left_join(summarise(d, ymax = spatstat::weighted.quantile(as.double(strsplit(value, ";")[[1]]), as.double(strsplit(value, ";")[[2]]))[5])) %>%
+#   return()
+# }
+# 
+# # as.tibble(paste0(rd_adj4$days_of_incubation,";",rd_adj4$mean_germs))$value
+# # 
+# box_fun3(paste0(rd_adj4$days_of_incubation,";",rd_adj4$mean_germs))
+# 
+# 
+# ggplot(rd_adj4, aes(x = color, y = paste0(days_of_incubation,";",mean_germs))) +
+#   stat_summary(fun.data=box_fun3, geom='boxplot')
+
+## http://www.stat.cmu.edu/~hseltman/files/WeightedBoxplot.R
+# Weighed boxplot function (adds argument weights=)
+wboxplot=function(x, ..., weights=NULL, range=1.5, width=NULL,
+      varwidth=FALSE, notch=FALSE, outline=TRUE, names, plot=TRUE, border=par("fg"), 
+      col=NULL, log="", pars=list(boxwex=0.8, staplewex=0.5, outwex=0.5),
+      horizontal=FALSE, add=FALSE, at=NULL, scale=1, dropwt=0) {
+
+  if (is.null(weights)) stop("weights are required for wboxplot()")
+  is.formula=function(form) {
+    if (inherits(form, "formula") || mode(form) == "call" && form[[1]] == as.name("~"))
+      return(TRUE)
+    else return(FALSE)
+  }
+  if (is.formula(x)) {
+    if (length(x) != 3)   stop("formula incorrect")
+    yg=strsplit(deparse(x)," ")[[1]]
+    if (length(yg) !=3) stop("formula must be y~x")
+    y=strsplit(yg[1],"\\$")[[1]]
+    if (length(y)==1) {
+      y=get(y,parent.frame())
+    } else {
+      y=unlist(get(y[1],parent.frame())[y[2]])
+    }
+    g=strsplit(yg[3],"\\$")[[1]]
+    if (length(g)==1) {
+      g=get(g,parent.frame())
+    } else {
+      g=unlist(get(g[1],parent.frame())[g[2]])
+    }
+    x=split(y, g)
+    weights=split(weights,g)
+  } 
+
+  
+  args <- list(x, ...)
+  namedargs <- if (!is.null(attributes(args)$names)) 
+      attributes(args)$names != ""
+  else rep(FALSE, length.out = length(args))
+  pars <- c(args[namedargs], pars)
+  groups <- if (is.list(x)) 
+      x
+  else args[!namedargs]
+  if (0 == (n <- length(groups))) 
+      stop("invalid first argument")
+  if (length(class(groups))) 
+      groups <- unclass(groups)
+  if (!missing(names)) 
+      attr(groups, "names") <- names
+  else {
+      if (is.null(attr(groups, "names"))) 
+          attr(groups, "names") <- 1:n
+      names <- attr(groups, "names")
+  }
+  for (i in 1:n) {
+    if (is.list(weights)) {
+      groups[i] <- list(wboxplot.stats(groups[[i]], weights[[i]], range, dropwt=dropwt))
+    } else {
+      groups[i] <- list(wboxplot.stats(groups[[i]], weights, range, dropwt=dropwt))
+    }
+  }
+  stats <- matrix(0, nr = 5, nc = n)
+  conf <- matrix(0, nr = 2, nc = n)
+  ng <- out <- wout <- group <- maxwt <- numeric(0)
+  ct <- 1
+  for (i in groups) {
+      stats[, ct] <- i$stats
+      conf[, ct] <- i$conf
+      ng <- c(ng, i$n)
+      if ((lo <- length(i$out))) {
+          out <- c(out, i$out)
+          wout <- c(wout, i$wout)
+          group <- c(group, rep.int(ct, lo))
+      }
+      ct <- ct + 1
+  }
+  maxwt <- rep(max(unlist(lapply(weights,max))),n)
+
+  z <- list(stats = stats, n = ng, conf = conf, out = out,
+            wout = wout, #outcol = outcol, 
+            group = group, maxwt=maxwt, names = names)
+  if (plot) {
+      wbxp(z, width, varwidth = varwidth, notch = notch, log = log, 
+          border = border, col = col, pars = pars, outline = outline, 
+          horizontal = horizontal, add = add, at = at, scale=scale)
+      invisible(z)
+  }
+  else z
+}
+
+# weighted version of boxplot.stats (adds weight argument)
+wboxplot.stats=function (x, weights, coef = 1.5, dropwt=0, do.conf = TRUE, do.out = TRUE) {
+    if (length(x)!=length(weights)) stop("length(x)!=length(weights)")
+    if (dropwt>0) {
+      Sel=weights>dropwt
+      if (!all(Sel)) {
+        if (!any(Sel)) stop("Can't drop all data")
+        x=x[Sel]; weights=weights[Sel]
+      }
+    }
+    nna <- ! (is.na(x) | is.na(weights))
+    n <- sum(nna)
+    # stats <- stats::fivenum(x, na.rm = TRUE)
+    xw=cbind(x,weights)
+    xw=xw[nna,]
+    if (length(xw)==0) {
+      stats=rep.int(NA, 5)
+    } else {
+      xw=xw[order(xw[,1]),]
+      cs=c(0,cumsum(xw[,2])/sum(xw[,2]))
+      x0=c(xw[1,1],xw[,1])
+      n=length(x0)
+      stats=c(x0[1],NA,NA,NA,x0[n])
+      for (i in 2:4) {
+        pr=c(NA,0.25,0.5,0.75)[i]
+        v1=x0[cs==pr]
+        if (length(v1)==1) {
+          stats[i]=v1
+        } else {
+          n1=max((1:n)[cs<pr])
+          n2=min((1:n)[cs>pr])
+          pr1=cs[n1]; pr2=cs[n2]
+          v1=x0[n1]; v2=x0[n2]
+          stats[i]=v1+(pr-pr1)/(pr2-pr1)*(v2-v1)
+        }
+      }
+    }
+    iqr <- diff(stats[c(2, 4)])
+    if (coef < 0) 
+        stop(paste(sQuote("coef"), "must not be negative"))
+    if (coef == 0) 
+        do.out <- FALSE
+    else {
+        out <- x < (stats[2] - coef * iqr) | x > (stats[4] + 
+            coef * iqr)
+        if (any(out[nna])) 
+            stats[c(1, 5)] <- range(x[!out], na.rm = TRUE)
+    }
+    conf <- if (do.conf) 
+        stats[3] + c(-1.58, 1.58) * iqr/sqrt(n)
+    list(stats = stats, n = n, conf = conf, out = if (do.out) x[out & 
+        nna] else numeric(0), wout = if (do.out) weights[out & nna] else numeric(0))
+}
+
+
+# weighted version of bxp
+wbxp=function(z, notch = FALSE, width = NULL, varwidth = FALSE, outline = TRUE, 
+    notch.frac = 0.5, log = "", border = par("fg"), col = par("bg"), 
+    pars = NULL, frame.plot = axes, horizontal = FALSE, add = FALSE, 
+    at = NULL, show.names = NULL, maxwt=1, scale=1, ...) 
+{
+    pars <- c(pars, list(...))
+    bplt <- function(x, wid, stats, out, wout, conf, notch, xlog, outcol, i, maxwt, scale=1) {
+        if (!any(is.na(stats))) {
+            xP <- if (xlog) 
+                function(x, w) x * exp(w)
+            else function(x, w) x + w
+            wid <- wid/2
+            if (notch) {
+                xx <- xP(x, wid * c(-1, 1, 1, notch.frac, 1, 
+                  1, -1, -1, -notch.frac, -1))
+                yy <- c(stats[c(2, 2)], conf[1], stats[3], conf[2], 
+                  stats[c(4, 4)], conf[2], stats[3], conf[1])
+            }
+            else {
+                xx <- xP(x, wid * c(-1, 1, 1, -1))
+                yy <- stats[c(2, 2, 4, 4)]
+            }
+            if (!notch) 
+                notch.frac <- 1
+            wntch <- notch.frac * wid
+            xypolygon(xx, yy, lty = "blank", col = boxfill[i])
+            xysegments(xP(x, -wntch), stats[3], xP(x, +wntch), 
+                stats[3], lty = medlty[i], lwd = medlwd[i], col = medcol[i])
+            xypoints(x, stats[3], pch = medpch[i], cex = medcex[i], 
+                col = medcol[i], bg = medbg[i])
+            xysegments(rep.int(x, 2), stats[c(1, 5)], rep.int(x, 
+                2), stats[c(2, 4)], lty = whisklty[i], lwd = whisklwd[i], 
+                col = whiskcol[i])
+            xysegments(rep.int(xP(x, -wid * staplewex), 2), stats[c(1, 
+                5)], rep.int(xP(x, +wid * staplewex), 2), stats[c(1, 
+                5)], lty = staplelty[i], lwd = staplelwd[i], 
+                col = staplecol[i])
+            xypolygon(xx, yy, lty = boxlty[i], lwd = boxlwd[i], 
+                border = boxcol[i])
+            if ((nout <- length(out)) > 0) {
+                xysegments(rep(x - wid * outwex, nout), out, 
+                  rep(x + wid * outwex, nout), out, lty = outlty[i], 
+                  lwd = outlwd[i], col = outcol[i])
+                outpoints(rep.int(x, nout), out, wout, maxwt, ocol = col[i], scale,
+                  bg = outbg[i])
+            }
+            if (any(inf <- !is.finite(out))) {
+                warning(paste("Outlier (", paste(unique(out[inf]), 
+                  collapse = ", "), ") in ", paste(x, c("st", 
+                  "nd", "rd", "th")[pmin(4, x)], sep = ""), " boxplot are NOT drawn", 
+                  sep = ""))
+            }
+        }
+    }
+    if (!is.list(z) || 0 == (n <- length(z$n))) 
+        stop("invalid first argument")
+    if (is.null(at)) 
+        at <- 1:n
+    else if (length(at) != n) 
+        stop(paste(sQuote("at"), " must have same length as ", 
+            sQuote("z $ n"), ", i.e. ", n, sep = ""))
+    if (is.null(z$out)) 
+        z$out <- numeric()
+    if (is.null(z$group) || !outline) 
+        z$group <- integer()
+    if (is.null(pars$ylim)) 
+        ylim <- range(z$stats[is.finite(z$stats)], z$out[is.finite(z$out)], 
+            if (notch) 
+                z$conf[is.finite(z$conf)])
+    else {
+        ylim <- pars$ylim
+        pars$ylim <- NULL
+    }
+    if (length(border) == 0) 
+        border <- par("fg")
+    if (!add) {
+        plot.new()
+        if (horizontal) 
+            plot.window(ylim = c(0.5, n + 0.5), xlim = ylim, 
+                log = log)
+        else plot.window(xlim = c(0.5, n + 0.5), ylim = ylim, 
+            log = log)
+    }
+    xlog <- (par("ylog") && horizontal) || (par("xlog") && !horizontal)
+    pcycle <- function(p, def1, def2 = NULL) rep(if (!is.null(p)) 
+        p
+    else if (!is.null(def1)) 
+        def1
+    else def2, length.out = n)
+    boxlty <- pcycle(pars$boxlty, pars$lty, par("lty"))
+    boxlwd <- pcycle(pars$boxlwd, pars$lwd, par("lwd"))
+    boxcol <- pcycle(pars$boxcol, border)
+    boxfill <- pcycle(pars$boxfill, col)
+    boxwex <- pcycle(pars$boxwex, 0.8 * {
+        if (n <= 1) 
+            1
+        else quantile(diff(sort(if (xlog) 
+            log(at)
+        else at)), 0.1)
+    })
+    medlty <- pcycle(pars$medlty, pars$lty, par("lty"))
+    medlwd <- pcycle(pars$medlwd, pars$lwd, par("lwd"))
+    medpch <- pcycle(pars$medpch, as.integer(NA))
+    medcex <- pcycle(pars$medcex, pars$cex, par("cex"))
+    medcol <- pcycle(pars$medcol, border)
+    medbg <- pcycle(pars$medbg, pars$bg, par("bg"))
+    whisklty <- pcycle(pars$whisklty, pars$lty, "dashed")
+    whisklwd <- pcycle(pars$whisklwd, pars$lwd, par("lwd"))
+    whiskcol <- pcycle(pars$whiskcol, border)
+    staplelty <- pcycle(pars$staplelty, pars$lty, par("lty"))
+    staplelwd <- pcycle(pars$staplelwd, pars$lwd, par("lwd"))
+    staplecol <- pcycle(pars$staplecol, border)
+    staplewex <- pcycle(pars$staplewex, 0.5)
+    outlty <- pcycle(pars$outlty, "blank")
+    outlwd <- pcycle(pars$outlwd, pars$lwd, par("lwd"))
+    outpch <- pcycle(pars$outpch, pars$pch, par("pch"))
+    outcex <- pcycle(pars$outcex, pars$cex, par("cex"))
+    outcol <- pcycle(pars$outcol, border)
+    outbg <- pcycle(pars$outbg, pars$bg, par("bg"))
+    outwex <- pcycle(pars$outwex, 0.5)
+    width <- if (!is.null(width)) {
+        if (length(width) != n | any(is.na(width)) | any(width <= 
+            0)) 
+            stop("invalid boxplot widths")
+        boxwex * width/max(width)
+    }
+    else if (varwidth) 
+        boxwex * sqrt(z$n/max(z$n))
+    else if (n == 1) 
+        0.5 * boxwex
+    else rep.int(boxwex, n)
+    if (horizontal) {
+        stop("horizontal not programmed yet")
+        xypoints <- function(x, y, ...) points(y, x, ...)
+        xypolygon <- function(x, y, ...) polygon(y, x, ...)
+        xysegments <- function(x0, y0, x1, y1, ...) segments(y0, 
+            x0, y1, x1, ...)
+    }
+    else {
+        xypoints <- points
+        outpoints=function(x, y, weights, maxwt, ocol, scale=1, ...) {
+          symbols(x, y, circles=sqrt(weights), add=TRUE, fg=ocol,
+                  inches=scale*0.1*max(sqrt(weights))/sqrt(maxwt), xpd=NA, ...)
+        }
+        xypolygon <- polygon
+        xysegments <- segments
+    }
+    for (i in 1:n) {
+      bplt(at[i], wid = width[i], stats = z$stats[, i], out = z$out[z$group == i],
+           wout=z$wout[z$group == i]  ,conf = z$conf[, i], notch = notch, 
+           xlog = xlog, outcol = col[i], i = i, maxwt=z$maxwt[i], scale)
+      # Show median if hidden in Q1 or Q3
+      if (z$stats[2,i]==z$stats[3,i] || z$stats[4,i]==z$stats[3,i]) lines(at[i]+c(-0.5,+0.5)*width[i], rep(z$stats[3,i],2), lwd=3)
+    }
+    axes <- is.null(pars$axes)
+    if (!axes) {
+        axes <- pars$axes
+        pars$axes <- NULL
+    }
+    if (axes) {
+        ax.pars <- pars[names(pars) %in% c("xaxt", "yaxt", "las", 
+            "cex.axis", "col.axis")]
+        if (is.null(show.names)) 
+            show.names <- n > 1
+        if (show.names) 
+            do.call("axis", c(list(side = 1 + horizontal, at = at, 
+                labels = z$names), ax.pars))
+        do.call("axis", c(list(side = 2 - horizontal), ax.pars))
+    }
+    do.call("title", pars[names(pars) %in% c("main", "cex.main", 
+        "col.main", "sub", "cex.sub", "col.sub", "xlab", "ylab", 
+        "cex.lab", "col.lab")])
+    if (frame.plot) 
+        box()
+    invisible(at)
+}
+
+# wboxplot(filter(rd_adj4,color == "bl")$days_of_incubation, weights = filter(rd_adj4,color == "bl")$mean_germs)
+# wboxplot(filter(rd_adj4,color == "rd")$days_of_incubation, weights = filter(rd_adj4,color == "rd")$mean_germs)
+# wboxplot(filter(rd_adj4,color == "nuttalliae")$days_of_incubation, weights = filter(rd_adj4,color == "nuttalliae")$mean_germs)
+
+wboxplot(rd_adj4$days_of_incubation~rd_adj4$color, weights = rd_adj4$mean_germs)
+
+
+summarise(group_by(rd_adj3, color, days_of_incubation), stat1 = boxplot.stats(germinated_this_day_adj)$stats[1]) %>%  
+  left_join(summarise(group_by(rd_adj3, color, days_of_incubation), stat2 = boxplot.stats(germinated_this_day_adj)$stats[2])) %>%  
+  left_join(summarise(group_by(rd_adj3, color, days_of_incubation), stat3 = boxplot.stats(germinated_this_day_adj)$stats[3])) %>%  
+  left_join(summarise(group_by(rd_adj3, color, days_of_incubation), stat4 = boxplot.stats(germinated_this_day_adj)$stats[4])) %>%  
+  left_join(summarise(group_by(rd_adj3, color, days_of_incubation), stat5 = boxplot.stats(germinated_this_day_adj)$stats[5])) %>%
+  #left_join(rd_adj3,.) %>%
+  #filter(germinated_this_day_adj > 0) %>%
+  #filter_at(vars(starts_with("stat")), any_vars(. > 0)) %>%
+ggplot(aes(x = days_of_incubation, fill = color, color = color)) +
+  geom_ribbon(aes(ymin = stat2, ymax = stat4), alpha = 0.5, colour = NA) +
+  #geom_ribbon(aes(ymin = stat1, ymax = stat5), alpha = 0.1, colour = NA) +
+  geom_line(aes(y = stat3),size = 2, lineend = "square", linejoin = "mitre") +
+  scale_color_manual(values = c("grey40","gold","red")) +
+  scale_fill_manual(values = c("grey40","gold","red")) +
+  labs(y = "daily germination rate (germinated / viable)", x = "incubation time (days)") + 
+  theme_minimal()
+
+rd_adj3 %>%
+  group_by(color, days_of_incubation) %>%
+  summarise(germinated_this_day_adj = mean(germinated_this_day_adj)) %>%
+  mutate(ymin = as.numeric(color)-1*germinated_this_day_adj/2, ymax = as.numeric(color)+germinated_this_day_adj/2) %>%
+  filter(germinated_this_day_adj != 0) %>%
+ggplot(aes(fill = color, color = color)) +
+  geom_ribbon(aes(x = days_of_incubation, ymin = ymin, ymax = ymax)) +
+  scale_fill_manual(values = c("grey50","gold","red")) +
+  scale_color_manual(values = c("grey50","gold","red")) +
+  theme_minimal()
+
+rd_adj3_est <- rd_adj3 %>%
+  mutate(germinated_est = round(germinated_this_day_adj * 50,0)) %>%
+  select( -germinated_this_day_adj )
+seeds_est <- tibble()
+for(i in 1:length(rd_adj3_est$germinated_est)) {
+  for(j in 1:rd_adj3_est$germinated_est[i]) {
+    seeds_est %<>% bind_rows(rd_adj3_est[i,])
+  }
+}
+
+seeds_est %>%
+  filter(germinated_est > 0) %>%
+  select(population, color, days_of_incubation) %>%
+ggplot(aes(y = days_of_incubation, x = color, fill = color)) +
+  #geom_violin( adjust = 5 ) +
+  geom_boxplot() +
+  geom_jitter() +
+  scale_fill_manual(values = c("grey50","gold","red")) +
+  scale_color_manual(values = c("grey50","gold","red")) +
+  theme_minimal()
+
+seeds_est %>%
+  filter(germinated_est > 0) %>%
+  select(population, color, days_of_incubation) %>%
+  count(days_of_incubation, color) %>%
+ggplot(aes(x = days_of_incubation, y = n, fill = color, color = color)) +
+  #geom_violin( adjust = 5 ) +
+  #geom_boxplot() +
+  geom_line() +
+  scale_fill_manual(values = c("grey50","gold","red")) +
+  scale_color_manual(values = c("grey50","gold","red")) +
+  theme_minimal()
+
+```
+
+
+```{r fig2}
+#figure showing rate of germination by stratification period with a correction for seed viability.
+
+data1 <- data %>%
+  filter(days_of_incubation >= 0) %>%
+  group_by(population, color, replicate, treatment) %>% summarise(germinated = sum(germinated_this_day)/50) %>%
+  ungroup() %>%
+  mutate(treatment = as.factor(treatment))
+
+#adjust germination to remove "non-viable" seeds
+max_germ_data <- data1 %>%
+  group_by(population,color) %>%
+  summarise(max_germ = max(germinated))
+data2 <- left_join(data1,max_germ_data) %>%
+  transmute(population, color, replicate, treatment, germ_adj = if_else(max_germ!=0,germinated/max_germ,NaN))
+  
+# just lr and dr adjusted to a normalized value, to simulate tests with 50 "rd" seeds.
+rd_adj1 <- morphcounts %>%
+  spread(color,morphproportion) %>%
+  mutate(bl = 1,
+         dr = dr/rd,
+         lr = lr/rd) %>%
+  select(-rd) %>%
+  gather(key = color, value = morphproportion, bl:lr) %>%
+  add_row(population = "N3", color = "nuttalliae", morphproportion = 1) %>%
+  left_join(data2,.) %>%
+  mutate(adjusted_germination = germ_adj * morphproportion) %>%
+  select(-germ_adj,-morphproportion)
+nut_filter <- rd_adj1 %>%
+  filter(color == "nuttalliae")
+color_filter <- rd_adj1 %>%
+  filter(color != "nuttalliae") %>%
+  spread(color,adjusted_germination) %>%
+  mutate(rd = lr + dr) %>%
+  select( -dr, -lr) %>%
+  gather(key = "color", value = "adjusted_germination",bl:rd)
+rd_adj2 <- bind_rows(color_filter,nut_filter) %>%
+  ungroup() %>%
+  mutate(
+    population = as.factor(population),
+    color = as.factor(color)
+  ) %>%
+  filter(!is.na(adjusted_germination))
+
+# rd_adj2 %>%
+# ggplot(aes(x = treatment, y = adjusted_germination, fill = color)) +
+#   geom_boxplot(position = "dodge") +
+#   scale_fill_manual(values = c("grey40","gold","darkorange")) +
+#   theme_minimal()
+
+
+# rd_adj2 %>%
+#   group_by(color, treatment) %>%
+#   summarise(adjusted_germination = mean(adjusted_germination)) %>%
+#   mutate(treatment = as.integer(levels(treatment))[treatment]) %>%
+# ggplot(aes(x = treatment, y = adjusted_germination, color = color)) +
+#   geom_line() +
+#   scale_color_manual(values = c("grey40","gold","darkorange")) +
+#   theme_minimal()
+
+# rd_adj2 %>%
+#   mutate(treatment = as.integer(levels(treatment))[treatment]) %>%
+# ggplot(aes(x = treatment, y = adjusted_germination, color = color, fill = color)) +
+#   geom_smooth(method = "loess", span = 1) +
+#   scale_color_manual(values = c("grey40","gold","red")) +
+#   scale_fill_manual(values = c("grey40","gold","red")) +
+#   theme_minimal()
+
+# rd_adj2 %>%
+#   mutate(treatment = as.integer(levels(treatment))[treatment]) %>%
+# ggplot(aes(x = treatment, y = adjusted_germination, color = color, fill = color)) +
+#   geom_point() +
+#   scale_color_manual(values = c("grey40","gold","red")) +
+#   scale_fill_manual(values = c("grey40","gold","red")) +
+#   theme_minimal()
+
+#fill_color[3] <- "grey35"
+summarise(group_by(rd_adj2, treatment, color), stat1 = boxplot.stats(adjusted_germination)$stats[1]) %>%
+  left_join(summarise(group_by(rd_adj2, treatment, color), stat2 = boxplot.stats(adjusted_germination)$stats[2])) %>%
+  left_join(summarise(group_by(rd_adj2, treatment, color), stat3 = boxplot.stats(adjusted_germination)$stats[3])) %>%
+  left_join(summarise(group_by(rd_adj2, treatment, color), stat4 = boxplot.stats(adjusted_germination)$stats[4])) %>%
+  left_join(summarise(group_by(rd_adj2, treatment, color), stat5 = boxplot.stats(adjusted_germination)$stats[5])) %>%
+  ungroup() %>%
+  mutate(treatment = as.integer(levels(treatment))[treatment]) %>%
+  mutate(color = as.character(color)) %>%
+  mutate(color = case_when(
+    color == "bl" ~ "black",
+    color == "rd" ~ "red",
+    TRUE ~ color
+  )) %>%
+  mutate( color = factor(color, levels = c("nuttalliae", "red", "black"))) %>%
+ggplot(aes(x = treatment, y = stat3, color = color, fill = color)) +
+  geom_ribbon(aes(ymin = stat2, ymax = stat4), alpha = 0.4, colour = NA) +
+  #geom_ribbon(aes(ymin = stat1, ymax = stat5), alpha = 0.1, colour = NA) +
+  geom_line(size = 3, lineend = "square", linejoin = "mitre") +
+  geom_point(size = 4.5, shape = 19, stroke = 1) +
+  scale_x_continuous(breaks = c(0,1,2,4,6,9)) +
+  scale_color_manual(values = fill_color_2, name = "seed morph") +
+  scale_fill_manual(values = fill_color, name = "seed morph") +
+  labs(y = "germination rate", x = "stratification period (weeks)") + 
+  theme_expo2018_legend(legend.position = c(0.8, 0.2))
+
+```
+
+```{r fig3}
+# parental_samples_tidy <- mutate(samples, black_proportion_2 = black_proportion) %>%
+#   gather(key="morph",value="proportion",red_proportion,black_proportion) %>%
+#   gather(key = "morph2", value = "proportion2", light_red_proportion, dark_red_proportion, black_proportion_2) %>%
+#   #select(population, morph, proportion, total) %>%
+#   mutate(population = factor(population, levels = unique(population[order(as.double(morph=="red_proportion")-proportion)])))
+
+
+
+max_germ_data <- data %>%
+  filter(days_of_incubation >= 0) %>%
+  group_by(population, color, replicate, treatment) %>% summarise(germinated = sum(germinated_this_day)/50) %>%
+  ungroup() %>%
+  mutate(treatment = as.factor(treatment)) %>%
+  #adjust germination to remove "non-viable" seeds
+  group_by(population,color) %>%
+  summarise(max_germ = max(germinated)) %>%
+  filter(color != "nuttalliae") %>%
+  spread(key = color, value = max_germ) %>%
+  ungroup() %>%
+  transmute(population,
+            lr_max_germ = lr,
+            dr_max_germ = dr,
+            bl_max_germ = bl)
+
+est_morph_proportions <- morphcounts %>%
+  spread(color, morphproportion) %>%
+  transmute(population,
+            lr_prop = lr,
+            dr_prop = dr,
+            bl_prop = bl) %>%
+  left_join(max_germ_data) %>%
+  transmute(population,
+            red_proportion = lr_max_germ * lr_prop + dr_max_germ * dr_prop,
+            black_proportion = bl_prop) %>%
+            # black_proportion = bl_prop * bl_max_germ) %>%
+  mutate(total_prop = red_proportion + black_proportion) %>%
+  transmute(population,
+            est_red_prop = red_proportion / total_prop,
+            est_black_prop = black_proportion / total_prop) %>%
+  gather(key = "color", value = "est_proportion", est_red_prop, est_black_prop) %>%
+  mutate(color = case_when(
+         color == "est_black_prop" ~ "black",
+         color == "est_red_prop" ~ "red",
+         TRUE ~ color
+         ))
+
+tidy_samples <- samples %>%
+  select(population, red_proportion, black_proportion, total) %>%
+  gather(key = "color", value = "proportion", red_proportion, black_proportion ) %>%
+  mutate( pop_total = total,
+          color = case_when(
+            color == "black_proportion" ~ "black",
+            color == "red_proportion" ~ "red",
+            TRUE ~ color
+          )) %>%
+  select( -total )  %>%
+  mutate(population = factor(population, levels = unique(population[order(as.double(color=="red")-proportion)])))
+
+est_tidy_samples <- left_join(tidy_samples,est_morph_proportions)  %>%
+  mutate(population = factor(population, levels = unique(population[order(as.double(color=="red")-est_proportion)])))
+
+# TODO
+# fix the population names (turn them into numbers) ✓
+# adjust the proportions to remove "nonviable" seeds  ✓
+# Add error bars for the sd of image samples
+# Move the "total" seed count above the bars ✓
+# In each bar, label the proportion.  ✓
+
+ggplot() +
+  geom_col(data = tidy_samples, aes(x=population,y=proportion,fill=color), position="fill") +
+  # geom_text(data = spread(tidy_samples, color, proportion), aes(x=population,y=0.96,label = paste0("n = ",pop_total)), color = "white", size = 11.5/1.5) +
+  geom_text(data = spread(tidy_samples, color, proportion), aes(x=population,y=0.98,label = pop_total), color = "white", size = 11.5/1.5) +
+  geom_text(data = filter(tidy_samples, color == "red"), aes(x=population,y=proportion - 0.02,label = round(proportion,2)), color = "white", size = 11.5/1.5) +
+  geom_text(data = filter(tidy_samples, color == "black"), aes(x=population,y= 1-proportion + 0.02,label = round(proportion,2)), color = "white", size = 11.5/1.5) +
+  scale_fill_manual(values=fill_color_2[3:2], labels = c("black", "red"), name = "seed morph") +
+  xlab("population")+ylab("proportion") +
+  theme_expo2018_legend(legend.position = "right")
+
+
+# ggplot(est_tidy_samples, aes(x=population,y=est_proportion,fill=color)) +
+#   # geom_col(position="dodge") +
+#   geom_col(position="fill") +
+#   geom_text(aes(x=population,y=0.96,label = pop_total), color = "white") +
+#   scale_fill_manual(values=fill_color[3:2], labels = c("black", "red"), name = "seed morph") +
+#   xlab("population")+ylab("proportion" )+
+#   # theme_ipsum_rc(grid = FALSE, base_size = 11.5 * 1.5, axis_title_size = 11.5 * 2, axis_title_face = "bold", axis_title_just = "mc") +
+#   theme_expo2018_legend(legend.position = "right")
+
+ggplot() +
+  geom_col(data = tidy_samples, aes(x=population,y=proportion,fill=color), position="fill") +
+  # geom_text(data = spread(tidy_samples, color, proportion), aes(x=population,y=0.96,label = paste0("n = ",pop_total)), color = "white", size = 11.5/1.5) +
+  geom_text(data = spread(tidy_samples, color, proportion), aes(x=population,y=0.98,label = pop_total), color = "white", size = 11.5/1.5, angle = 90, hjust = 1) +
+  geom_text(data = filter(tidy_samples, color == "red"), aes(x=population,y=proportion - 0.02,label = round(proportion,2)), color = "white", size = 11.5/1.5, angle = 90, hjust = 1) +
+  geom_text(data = filter(tidy_samples, color == "black"), aes(x=population,y= 1-proportion + 0.02,label = round(proportion,2)), color = "white", size = 11.5/1.5, angle = 90, hjust = 0) +
+  scale_fill_manual(values=fill_color_2[3:2], labels = c("black", "red"), name = "seed morph") +
+  xlab("population")+ylab("proportion") +
+  theme_expo2018_legend(legend.position = "right",
+                        axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))
+
+```
+

@@ -1,0 +1,151 @@
+---
+title: "Geomorphometrics"
+output: html_notebook
+---
+
+
+```{r setup}
+
+library(geomorph)
+
+#images names
+redmorphs <- c("B72_DR_04.jpg",
+               "B72_DR_14.jpg",
+               "B72_DR_16.jpg",
+               "B72_DR_18.jpg",
+               "B72_DR_20.jpg",
+               "B72_LR_06.jpg",
+               "B72_LR_12.jpg",
+               "B72_LR_16.jpg",
+               "B72_LR_18.jpg",
+               "B72_LR_22.jpg",
+               "B72_LR_26.jpg",
+               "Sabrina2_BL_18.jpg",
+               "Sabrina2_DR_02.jpg",
+               "Sabrina2_DR_04.jpg",
+               "Sabrina2_DR_06.jpg",
+               "Sabrina2_DR_08.jpg",
+               "Sabrina2_DR_10.jpg",
+               "Sabrina2_DR_12.jpg",
+               "Sabrina2_DR_14.jpg",
+               "Sabrina2_DR_16.jpg",
+               "Sabrina2_DR_20.jpg",
+               "Sabrina2_DR_22.jpg",
+               "Sabrina2_DR_24.jpg",
+               "Sabrina2_DR_26.jpg",
+               "Sabrina2_LR_02.jpg",
+               "Sabrina2_LR_04.jpg",
+               "Sabrina2_LR_06.jpg",
+               "Sabrina2_LR_08.jpg",
+               "Sabrina2_LR_10.jpg",
+               "Sabrina2_LR_12.jpg",
+               "Sabrina2_LR_14.jpg",
+               "Sabrina2_LR_16.jpg",
+               "Sabrina2_LR_18.jpg",
+               "Sabrina2_LR_20.jpg",
+               "Sabrina2_LR_22.jpg",
+               "Sabrina2_LR_24.jpg",
+               "Sabrina2_LR_26.jpg",
+               "WayneHq2_lightred_02.jpg",
+               "WayneHq2_lightred_04.jpg")
+
+blackmorphs <- c("Athens0001_03.jpg",
+                 "Athens0001_23.jpg",
+                 "Athens0001_25.jpg",
+                 "Athens0001_27.jpg",
+                 "B72_BL_06.jpg",
+                 "B72_BL_10.jpg",
+                 "Sabrina2_BL_02.jpg",
+                 "Sabrina2_BL_06.jpg",
+                 "Sabrina2_BL_08.jpg",
+                 "Sabrina2_BL_10.jpg",
+                 "Sabrina2_BL_12.jpg",
+                 "Sabrina2_BL_14.jpg",
+                 "Sabrina2_BL_16.jpg",
+                 "Sabrina2_BL_20.jpg",
+                 "Sabrina2_BL_24.jpg",
+                 "Sabrina2_BL_27.jpg",
+                 "Sabrina2_BL_29.jpg")
+
+quinoa <- c("quinoa_02.jpg",
+            "quinoa_04.jpg",
+            "quinoa_06.jpg")
+
+nuttalliae <- c("N3_02.jpg",
+                "N3_03.jpg",
+                "N3_04.jpg",
+                "N3_06.jpg",
+                "N3_09.jpg",
+                "N3_11.jpg",
+                "N3_13.jpg",
+                "N3_15.jpg",
+                "N3_17.jpg",
+                "N3_19.jpg",
+                "N3_021.jpg",
+                "N3_023.jpg",
+                "N3_025.jpg",
+                "N3_027.jpg",
+                "N3_029.jpg")
+
+# macrocalycium <- c()
+
+filepath <- "/Users/aperium/Dropbox/Projects/Chenopodium/Data/Bisected seeds/"
+
+filesin <- paste0(filepath,c(sample(redmorphs,2),sample(blackmorphs,2),sample(quinoa,2),sample(nuttalliae,2)))
+# scales <- c()
+
+mytps <- "/Users/aperium/Dropbox/Projects/Chenopodium/Data/Bisected seeds/2Dlandmarks2.tps"
+
+```
+
+```{r}
+
+
+
+#this line needs run from the console because of the interactive plot.
+digitize2d(filesin, 8, tpsfile = mytps, scale = 1000, verbose = FALSE)
+```
+
+
+```{r, eval = FALSE}
+#attempting to combine short tpsfiles into a longer complete file.
+
+# looking through the digitize2d function, it may attempt to read existing data from file and only add new data for items not already marked with landmarks. If that's the case, the function will work fine without me writing this function. I would like to add the the ability to remove the last entry if a mistake was made. I guess I'll play around with this later.
+
+combinetps <- function(dir_a, dir_b, dir_out) {
+  library(geomorph)
+  data_a <- readland.tps2(file = dir_a, specID = "ID")
+  data_b <- readland.tps2(file = dir_b, specID = "ID")
+  
+  writeland.tps(newdata, dir_out)
+  
+}
+
+```
+
+```{r}
+
+#flow: digitize2d -> readland.tps -> define.sliders -> gpagen -> geomporph.data.frame -> procD.lm
+
+tpsfile <- "/Users/aperium/Dropbox/Projects/Chenopodium/Data/Bisected seeds/2Dlandmarks.tps"
+
+A <- readland.tps(tpsfile, specID = "ID")
+
+gdf <- geomorph.data.frame(shape = A,
+                           color = c("red", "red", "black", "black", "quinoa", "quinoa", "nuttalliae", "nuttalliae"))
+
+# define.sliders(A)
+
+plotAllSpecimens(A)
+
+gpagen(gdf$shape, print.progress = TRUE) %>% plot()
+
+delta <- procD.lm(shape ~ color, data = gdf, print.progress = TRUE)
+delta
+par(mfrow=c(2,2))
+plot(delta)
+
+
+
+```
+

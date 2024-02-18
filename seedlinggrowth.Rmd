@@ -1,0 +1,107 @@
+---
+title: "Seedling Growth"
+output: html_notebook
+---
+
+```{r setup}
+#load libraries
+library(tidyverse)
+library(magrittr)
+library(ggplot2)
+
+library(ade4)
+library(vegan)
+library(gclus)
+library(ape)
+
+# special libararies only availible in source form
+source("/Users/aperium/Dropbox/Projects/MSES/CLasses/Bios 8700 - Biostats II/WorkingDirectory/bookscripts/evplot2.R")
+source("/Users/aperium/Dropbox/Projects/MSES/CLasses/Bios 8700 - Biostats II/WorkingDirectory/multiplot.R")
+source("/Users/aperium/Dropbox/Projects/MSES/CLasses/Bios 8700 - Biostats II/WorkingDirectory/evmultiplot.R")
+
+source("/users/aperium/Dropbox/Projects/MSES/CLasses/Bios 8700 - Biostats II/WorkingDirectory/bookscripts/HighstatLibV10.R")
+
+library(knitr)
+#fig.asp=0.618
+knitr::opts_chunk$set(echo=FALSE, message = FALSE, warning = FALSE, results = 'markdown', tidy=TRUE, fig.asp=0.618)
+
+```
+
+
+```{r}
+#seed morphological data from the microscope bisections
+growthdata <- read_csv("/users/aperium/Dropbox/Projects/Chenopodium/Data/root growth/rootgrowth.csv") %>%
+  mutate(rootpace = root_length / day_after_planting,
+         shootpace = shoot_length / day_after_planting,
+         unique_seed_id = case_when(
+           color == "rd" ~ (sample - 1) * 50 + seed_number,
+           color == "bl" ~ 5 * 50 + (sample - 1) * 50 + seed_number,
+           TRUE ~ NaN
+         ),
+         color = as.factor(color)) 
+
+lm(formula = rootpace + shootpace ~ color, data = growthdata) %>% summary()
+
+
+
+growthdata %>%
+  filter(day_after_planting == max(day_after_planting)) %>%
+ggplot(., aes(x = color, y = root_length, fill = color)) +
+  geom_boxplot() +
+  scale_fill_manual(values = c("bl"="grey30", "rd"="firebrick3")) +
+  theme_minimal()  
+growthdata %>%
+  filter(day_after_planting == max(day_after_planting)) %>%
+ggplot(., aes(x = color, y = shoot_length, fill = color)) +
+  geom_boxplot() +
+  scale_fill_manual(values = c("bl"="grey30", "rd"="firebrick3")) +
+  theme_minimal()  
+
+ggplot(growthdata, aes(x = day_after_planting, y = shoot_length, color = color)) +
+  geom_point(size = 3) +
+  scale_color_manual(values = c("bl"="grey30", "rd"="firebrick3")) +
+  theme_minimal()
+
+ggplot(growthdata, aes(x = day_after_planting, y = root_length, color = color)) +
+  geom_point(size = 3) +
+  scale_color_manual(values = c("bl"="grey30", "rd"="firebrick3")) +
+  theme_minimal()
+
+
+#plot shoot growth
+rd_reg <- growthdata %>%
+  filter(color == "rd") %>%
+  lm(formula = shoot_length ~ day_after_planting, data = .)
+bl_reg <- growthdata %>%
+  filter(color == "bl") %>%
+  lm(formula = shoot_length ~ day_after_planting, data = .)
+ggplot(growthdata, aes(x = day_after_planting, y = shoot_length, color = color)) +
+  geom_jitter(size = 3, width = 0.05) +
+  geom_segment(aes(x = min(growthdata %>% filter(color =="rd") %>% .$day_after_planting), y = min(rd_reg$fitted.values), xend = max(growthdata %>% filter(color =="rd") %>% .$day_after_planting), yend = max(rd_reg$fitted.values), color = "rd")) + 
+  geom_segment(aes(x = 4, y = min(bl_reg$fitted.values), xend = max(growthdata %>% filter(color =="bl") %>% .$day_after_planting), yend = max(bl_reg$fitted.values), color = "bl")) +
+  scale_color_manual(values = c("bl"="grey30", "rd"="firebrick3")) +
+  theme_minimal()
+
+#plot root growth
+rd_root_reg <- growthdata %>%
+  filter(color == "rd") %>%
+  lm(formula = root_length ~ day_after_planting, data = .)
+bl_root_reg <- growthdata %>%
+  filter(color == "bl") %>%
+  lm(formula = root_length ~ day_after_planting, data = .)
+ggplot(growthdata, aes(x = day_after_planting, y = root_length, color = color)) +
+  geom_jitter(size = 3, width = 0.05) +
+  geom_segment(aes(x = min(growthdata %>% filter(color =="rd") %>% .$day_after_planting), y = min(rd_root_reg$fitted.values), xend = max(growthdata %>% filter(color =="rd") %>% .$day_after_planting), yend = max(rd_root_reg$fitted.values), color = "rd")) + 
+  geom_segment(aes(x = min(growthdata %>% filter(color =="bl") %>% .$day_after_planting), y = min(bl_root_reg$fitted.values), xend = max(growthdata %>% filter(color =="bl") %>% .$day_after_planting), yend = max(bl_root_reg$fitted.values), color = "bl")) +
+  scale_color_manual(values = c("bl"="grey30", "rd"="firebrick3")) +
+  theme_minimal()
+
+
+t.test(rootpace ~ color, data = growthdata)
+t.test(shootpace ~ color, data = growthdata)
+
+t.test(root_length ~ color, data = growthdata %>%
+  filter(day_after_planting == max(day_after_planting)))
+t.test(shoot_length ~ color, data = growthdata %>%
+  filter(day_after_planting == max(day_after_planting)))
+```
